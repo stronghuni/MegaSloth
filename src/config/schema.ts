@@ -53,6 +53,16 @@ export const slackConfigSchema = z.object({
   defaultChannel: z.string().default('general'),
 });
 
+export const discordConfigSchema = z.object({
+  webhookUrl: z.string().optional(),
+  botToken: z.string().optional(),
+  defaultChannelId: z.string().optional(),
+});
+
+export const teamsConfigSchema = z.object({
+  webhookUrl: z.string().optional(),
+});
+
 export const loggingConfigSchema = z.object({
   level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   pretty: z.boolean().default(true),
@@ -68,6 +78,8 @@ export const configSchema = z.object({
   gitlab: gitlabConfigSchema.default({}),
   bitbucket: bitbucketConfigSchema.default({}),
   slack: slackConfigSchema.default({}),
+  discord: discordConfigSchema.default({}),
+  teams: teamsConfigSchema.default({}),
   logging: loggingConfigSchema.default({}),
 });
 
@@ -80,5 +92,7 @@ export type GitLabConfig = z.infer<typeof gitlabConfigSchema>;
 export type BitbucketConfig = z.infer<typeof bitbucketConfigSchema>;
 export type SlackConfig = z.infer<typeof slackConfigSchema>;
 export type LoggingConfig = z.infer<typeof loggingConfigSchema>;
+export type DiscordConfig = z.infer<typeof discordConfigSchema>;
+export type TeamsConfig = z.infer<typeof teamsConfigSchema>;
 export type LLMConfig = z.infer<typeof llmConfigSchema>;
 export type Config = z.infer<typeof configSchema>;

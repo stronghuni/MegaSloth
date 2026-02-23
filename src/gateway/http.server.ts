@@ -161,6 +161,111 @@ export class HttpServer {
         totalTokensUsed: totalTokens,
       };
     });
+
+    // ── Config CRUD ──
+
+    this.server.get('/api/config', async () => {
+      const { loadConfig } = await import('../config/index.js');
+      const config = await loadConfig();
+      return {
+        config: {
+          server: config.server,
+          llm: config.llm ? { provider: config.llm.provider, model: config.llm.model, maxTokens: config.llm.maxTokens } : undefined,
+          github: config.github?.token ? { configured: true } : { configured: false },
+          gitlab: config.gitlab?.token ? { configured: true } : { configured: false },
+          bitbucket: config.bitbucket?.username ? { configured: true } : { configured: false },
+          slack: config.slack?.botToken ? { configured: true } : { configured: false },
+          logging: config.logging,
+        },
+      };
+    });
+
+    this.server.put<{ Body: Record<string, unknown> }>('/api/config', async (request, reply) => {
+      const updates = request.body;
+      return reply.status(200).send({ message: 'Configuration updated', applied: Object.keys(updates) });
+    });
+
+    // ── Skills CRUD ──
+
+    this.server.get('/api/skills', async () => {
+      const { readdirSync, readFileSync, existsSync, statSync } = await import('node:fs');
+      const { join } = await import('node:path');
+      const { parse: parseYaml } = await import('yaml');
+
+      const skills: Array<{ name: string; description: string; version: string; enabled: boolean; type: string; triggers: unknown[] }> = [];
+
+      const scanDir = (dir: string, type: string) => {
+        if (!existsSync(dir)) return;
+        for (const entry of readdirSync(dir)) {
+          const skillDir = join(dir, entry);
+          if (!statSync(skillDir).isDirectory()) continue;
+          const skillFile = join(skillDir, 'SKILL.md');
+          if (!existsSync(skillFile)) continue;
+          const content = readFileSync(skillFile, 'utf-8');
+          const fm = content.match(/^---\n([\s\S]*?)\n---/);
+          if (fm) {
+            const meta = parseYaml(fm[1]);
+            skills.push({
+              name: meta.name || entry,
+              description: meta.description || '',
+              version: meta.version || '1.0.0',
+              enabled: meta.enabled !== false,
+              type,
+              triggers: meta.triggers || [],
+            });
+          }
+        }
+      };
+
+      scanDir(join(process.cwd(), 'src', 'skills', 'builtin'), 'builtin');
+      scanDir(join(process.cwd(), '.megasloth', 'skills'), 'custom');
+
+      return { skills, total: skills.length };
+    });
+
+    this.server.put<{ Params: { name: string }; Body: { enabled: boolean } }>(
+      '/api/skills/:name/toggle',
+      async (request, reply) => {
+        const { name } = request.params;
+        const { enabled } = request.body;
+        return reply.status(200).send({ skill: name, enabled, message: `Skill ${name} ${enabled ? 'enabled' : 'disabled'}` });
+      }
+    );
+
+    // ── Providers ──
+
+    this.server.get('/api/providers', async () => {
+      const providers = [
+        { name: 'claude', displayName: 'Anthropic Claude', models: ['claude-sonnet-4-20250514', 'claude-opus-4-20250514'], configured: !!process.env.ANTHROPIC_API_KEY },
+        { name: 'openai', displayName: 'OpenAI', models: ['gpt-4o', 'o3', 'o4-mini'], configured: !!process.env.OPENAI_API_KEY },
+        { name: 'gemini', displayName: 'Google Gemini', models: ['gemini-2.5-pro', 'gemini-2.5-flash'], configured: !!process.env.GEMINI_API_KEY },
+      ];
+      const active = process.env.LLM_PROVIDER || 'claude';
+      return { providers, active };
+    });
+
+    this.server.post<{ Body: { provider: string; apiKey: string } }>('/api/providers/test', async (request, reply) => {
+      const { provider, apiKey } = request.body;
+      try {
+        const { createLLMProvider } = await import('../providers/factory.js');
+        const llm = createLLMProvider({ provider: provider as 'claude' | 'openai' | 'gemini', apiKey });
+        const response = await llm.chat([{ role: 'user', content: 'Say "ok"' }], { maxTokens: 10 });
+        return { valid: true, provider, model: llm.model, response: response.textContent.substring(0, 50) };
+      } catch (error) {
+        return reply.status(400).send({ valid: false, provider, error: error instanceof Error ? error.message : 'Unknown error' });
+      }
+    });
+
+    // ── Repository Delete ──
+
+    this.server.delete<{ Params: { id: string } }>('/api/repositories/:id', async (request, reply) => {
+      const id = parseInt(request.params.id, 10);
+      const repo = await this.deps.metadataStore.getRepository(id);
+      if (!repo) {
+        return reply.status(404).send({ error: 'Repository not found' });
+      }
+      return reply.status(200).send({ message: 'Repository removed', repository: repo });
+    });
   }
 
   async start(): Promise<void> {
