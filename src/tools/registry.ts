@@ -1,4 +1,4 @@
-import { type ToolDefinition, type ToolUse } from '../agent/claude-client.js';
+import { type ToolDefinition, type ToolUse } from '../providers/types.js';
 import { type GitProviderAdapter } from '../adapters/git/types.js';
 import { getLogger } from '../utils/logger.js';
 
@@ -14,7 +14,7 @@ export type ToolHandler = (input: Record<string, unknown>, context: ToolContext)
 export interface RegisteredTool {
   definition: ToolDefinition;
   handler: ToolHandler;
-  category: 'git' | 'pr' | 'ci' | 'issue' | 'code' | 'release';
+  category: 'git' | 'pr' | 'ci' | 'issue' | 'code' | 'release' | 'deploy' | 'env';
 }
 
 export class ToolRegistry {
@@ -557,6 +557,153 @@ export function createDefaultToolRegistry(): ToolRegistry {
       });
       return `Release created: ${release.tagName} - ${release.url}`;
     },
+  });
+
+  // --- NEW TOOLS: CI/CD Pipeline Management ---
+
+  registry.register({
+    category: 'ci',
+    definition: { name: 'list_workflows', description: 'List all CI/CD workflows/pipelines', input_schema: { type: 'object', properties: {} } },
+    handler: async (_, ctx) => JSON.stringify(await ctx.gitAdapter.listWorkflows(ctx.owner, ctx.repo), null, 2),
+  });
+
+  registry.register({
+    category: 'ci',
+    definition: { name: 'get_workflow_config', description: 'Get workflow configuration YAML', input_schema: { type: 'object', properties: { workflow_id: { type: 'string', description: 'Workflow ID or name' } }, required: ['workflow_id'] } },
+    handler: async (input, ctx) => ctx.gitAdapter.getWorkflowConfig(ctx.owner, ctx.repo, input.workflow_id as string),
+  });
+
+  registry.register({
+    category: 'ci',
+    definition: { name: 'trigger_workflow', description: 'Manually trigger a workflow run', input_schema: { type: 'object', properties: { workflow_id: { type: 'string', description: 'Workflow ID' }, ref: { type: 'string', description: 'Branch or tag ref' }, inputs: { type: 'object', description: 'Workflow inputs' } }, required: ['workflow_id', 'ref'] } },
+    handler: async (input, ctx) => {
+      const run = await ctx.gitAdapter.triggerWorkflow(ctx.owner, ctx.repo, input.workflow_id as string, input.ref as string, input.inputs as Record<string, string>);
+      return `Workflow triggered: ${run.id}`;
+    },
+  });
+
+  registry.register({
+    category: 'ci',
+    definition: { name: 'cancel_workflow', description: 'Cancel a running workflow', input_schema: { type: 'object', properties: { run_id: { type: 'string', description: 'Workflow run ID' } }, required: ['run_id'] } },
+    handler: async (input, ctx) => { await ctx.gitAdapter.cancelWorkflow(ctx.owner, ctx.repo, input.run_id as string); return 'Workflow cancelled'; },
+  });
+
+  // --- NEW TOOLS: Code Write Operations ---
+
+  registry.register({
+    category: 'code',
+    definition: { name: 'create_file', description: 'Create a new file in the repository', input_schema: { type: 'object', properties: { path: { type: 'string', description: 'File path' }, content: { type: 'string', description: 'File content' }, message: { type: 'string', description: 'Commit message' }, branch: { type: 'string', description: 'Target branch' } }, required: ['path', 'content', 'message'] } },
+    handler: async (input, ctx) => { await ctx.gitAdapter.createOrUpdateFile(ctx.owner, ctx.repo, { path: input.path as string, content: input.content as string, message: input.message as string, branch: input.branch as string | undefined }); return `File created: ${input.path}`; },
+  });
+
+  registry.register({
+    category: 'code',
+    definition: { name: 'update_file', description: 'Update an existing file in the repository', input_schema: { type: 'object', properties: { path: { type: 'string', description: 'File path' }, content: { type: 'string', description: 'New content' }, message: { type: 'string', description: 'Commit message' }, branch: { type: 'string', description: 'Target branch' } }, required: ['path', 'content', 'message'] } },
+    handler: async (input, ctx) => { await ctx.gitAdapter.createOrUpdateFile(ctx.owner, ctx.repo, { path: input.path as string, content: input.content as string, message: input.message as string, branch: input.branch as string | undefined }); return `File updated: ${input.path}`; },
+  });
+
+  registry.register({
+    category: 'code',
+    definition: { name: 'delete_file', description: 'Delete a file from the repository', input_schema: { type: 'object', properties: { path: { type: 'string', description: 'File path' }, message: { type: 'string', description: 'Commit message' }, branch: { type: 'string', description: 'Target branch' } }, required: ['path', 'message'] } },
+    handler: async (input, ctx) => { await ctx.gitAdapter.deleteFile(ctx.owner, ctx.repo, input.path as string, input.message as string, input.branch as string | undefined); return `File deleted: ${input.path}`; },
+  });
+
+  registry.register({
+    category: 'code',
+    definition: { name: 'search_code', description: 'Search for code in the repository', input_schema: { type: 'object', properties: { query: { type: 'string', description: 'Search query' } }, required: ['query'] } },
+    handler: async (input, ctx) => JSON.stringify(await ctx.gitAdapter.searchCode(ctx.owner, ctx.repo, input.query as string), null, 2),
+  });
+
+  // --- NEW TOOLS: Branch & PR Write ---
+
+  registry.register({
+    category: 'git',
+    definition: { name: 'create_branch', description: 'Create a new branch from a reference', input_schema: { type: 'object', properties: { branch_name: { type: 'string', description: 'New branch name' }, from_ref: { type: 'string', description: 'Source branch or commit SHA' } }, required: ['branch_name', 'from_ref'] } },
+    handler: async (input, ctx) => { const b = await ctx.gitAdapter.createBranch(ctx.owner, ctx.repo, input.branch_name as string, input.from_ref as string); return `Branch created: ${b.name} (${b.sha})`; },
+  });
+
+  registry.register({
+    category: 'git',
+    definition: { name: 'create_pull_request', description: 'Create a new pull request', input_schema: { type: 'object', properties: { title: { type: 'string', description: 'PR title' }, head: { type: 'string', description: 'Source branch' }, base: { type: 'string', description: 'Target branch' }, body: { type: 'string', description: 'PR description' } }, required: ['title', 'head', 'base'] } },
+    handler: async (input, ctx) => { const pr = await ctx.gitAdapter.createPullRequest(ctx.owner, ctx.repo, { title: input.title as string, head: input.head as string, base: input.base as string, body: input.body as string | undefined }); return `PR created: #${pr.number} - ${pr.url}`; },
+  });
+
+  registry.register({
+    category: 'git',
+    definition: { name: 'merge_pull_request', description: 'Merge a pull request', input_schema: { type: 'object', properties: { pr_number: { type: 'number', description: 'PR number' }, merge_method: { type: 'string', enum: ['merge', 'squash', 'rebase'], description: 'Merge method' } }, required: ['pr_number'] } },
+    handler: async (input, ctx) => { await ctx.gitAdapter.mergePR(ctx.owner, ctx.repo, input.pr_number as number, undefined, input.merge_method as 'merge' | 'squash' | 'rebase' | undefined); return `PR #${input.pr_number} merged`; },
+  });
+
+  // --- NEW TOOLS: Environment & Variables ---
+
+  registry.register({
+    category: 'env',
+    definition: { name: 'list_environments', description: 'List deployment environments', input_schema: { type: 'object', properties: {} } },
+    handler: async (_, ctx) => JSON.stringify(await ctx.gitAdapter.listEnvironments(ctx.owner, ctx.repo), null, 2),
+  });
+
+  registry.register({
+    category: 'env',
+    definition: { name: 'get_env_variables', description: 'Get environment variables', input_schema: { type: 'object', properties: { env_name: { type: 'string', description: 'Environment name' } }, required: ['env_name'] } },
+    handler: async (input, ctx) => JSON.stringify(await ctx.gitAdapter.getEnvironmentVariables(ctx.owner, ctx.repo, input.env_name as string), null, 2),
+  });
+
+  registry.register({
+    category: 'env',
+    definition: { name: 'set_env_variable', description: 'Set an environment variable', input_schema: { type: 'object', properties: { env_name: { type: 'string', description: 'Environment name' }, name: { type: 'string', description: 'Variable name' }, value: { type: 'string', description: 'Variable value' }, is_secret: { type: 'boolean', description: 'Is secret' } }, required: ['env_name', 'name', 'value'] } },
+    handler: async (input, ctx) => { await ctx.gitAdapter.setEnvironmentVariable(ctx.owner, ctx.repo, input.env_name as string, input.name as string, input.value as string, input.is_secret as boolean | undefined); return `Variable ${input.name} set`; },
+  });
+
+  registry.register({
+    category: 'env',
+    definition: { name: 'delete_env_variable', description: 'Delete an environment variable', input_schema: { type: 'object', properties: { env_name: { type: 'string', description: 'Environment name' }, name: { type: 'string', description: 'Variable name' } }, required: ['env_name', 'name'] } },
+    handler: async (input, ctx) => { await ctx.gitAdapter.deleteEnvironmentVariable(ctx.owner, ctx.repo, input.env_name as string, input.name as string); return `Variable ${input.name} deleted`; },
+  });
+
+  registry.register({
+    category: 'env',
+    definition: { name: 'get_repo_variables', description: 'Get repository-level variables', input_schema: { type: 'object', properties: {} } },
+    handler: async (_, ctx) => JSON.stringify(await ctx.gitAdapter.getRepositoryVariables(ctx.owner, ctx.repo), null, 2),
+  });
+
+  registry.register({
+    category: 'env',
+    definition: { name: 'set_repo_variable', description: 'Set a repository variable', input_schema: { type: 'object', properties: { name: { type: 'string', description: 'Variable name' }, value: { type: 'string', description: 'Variable value' }, is_secret: { type: 'boolean', description: 'Is secret' } }, required: ['name', 'value'] } },
+    handler: async (input, ctx) => { await ctx.gitAdapter.setRepositoryVariable(ctx.owner, ctx.repo, input.name as string, input.value as string, input.is_secret as boolean | undefined); return `Repo variable ${input.name} set`; },
+  });
+
+  // --- NEW TOOLS: Deployment ---
+
+  registry.register({
+    category: 'deploy',
+    definition: { name: 'list_deployments', description: 'List deployments', input_schema: { type: 'object', properties: { environment: { type: 'string', description: 'Filter by environment' } } } },
+    handler: async (input, ctx) => JSON.stringify(await ctx.gitAdapter.listDeployments(ctx.owner, ctx.repo, input.environment as string | undefined), null, 2),
+  });
+
+  registry.register({
+    category: 'deploy',
+    definition: { name: 'create_deployment', description: 'Create a new deployment', input_schema: { type: 'object', properties: { ref: { type: 'string', description: 'Branch/tag/SHA to deploy' }, environment: { type: 'string', description: 'Target environment' }, description: { type: 'string', description: 'Deployment description' } }, required: ['ref', 'environment'] } },
+    handler: async (input, ctx) => { const d = await ctx.gitAdapter.createDeployment(ctx.owner, ctx.repo, input.ref as string, input.environment as string, input.description as string | undefined); return `Deployment created: ${d.id} to ${d.environment}`; },
+  });
+
+  registry.register({
+    category: 'deploy',
+    definition: { name: 'get_deployment_status', description: 'Update deployment status', input_schema: { type: 'object', properties: { deployment_id: { type: 'string', description: 'Deployment ID' }, state: { type: 'string', enum: ['success', 'failure', 'in_progress'], description: 'New state' } }, required: ['deployment_id', 'state'] } },
+    handler: async (input, ctx) => { await ctx.gitAdapter.updateDeploymentStatus(ctx.owner, ctx.repo, input.deployment_id as string, input.state as 'success' | 'failure' | 'in_progress'); return `Deployment ${input.deployment_id} updated to ${input.state}`; },
+  });
+
+  // --- NEW TOOLS: Issue extensions ---
+
+  registry.register({
+    category: 'issue',
+    definition: { name: 'update_issue', description: 'Update an issue', input_schema: { type: 'object', properties: { issue_number: { type: 'number', description: 'Issue number' }, title: { type: 'string', description: 'New title' }, body: { type: 'string', description: 'New body' }, labels: { type: 'array', items: { type: 'string' }, description: 'Labels' }, assignees: { type: 'array', items: { type: 'string' }, description: 'Assignees' } }, required: ['issue_number'] } },
+    handler: async (input, ctx) => { await ctx.gitAdapter.updateIssue(ctx.owner, ctx.repo, input.issue_number as number, { title: input.title as string | undefined, body: input.body as string | undefined, labels: input.labels as string[] | undefined, assignees: input.assignees as string[] | undefined }); return `Issue #${input.issue_number} updated`; },
+  });
+
+  registry.register({
+    category: 'issue',
+    definition: { name: 'close_issue', description: 'Close an issue', input_schema: { type: 'object', properties: { issue_number: { type: 'number', description: 'Issue number' } }, required: ['issue_number'] } },
+    handler: async (input, ctx) => { await ctx.gitAdapter.updateIssue(ctx.owner, ctx.repo, input.issue_number as number, { title: undefined }); return `Issue #${input.issue_number} closed`; },
   });
 
   return registry;

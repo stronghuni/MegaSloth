@@ -561,6 +561,115 @@ export class GitLabAdapter implements GitProviderAdapter {
     return (tree || []).map((item: any) => String(item.path || ''));
   }
 
+  // File write operations
+  async createOrUpdateFile(owner: string, repo: string, input: import('./types.js').CreateFileInput): Promise<void> {
+    const projectPath = this.getProjectPath(owner, repo);
+    try {
+      await this.api.RepositoryFiles.edit(projectPath, input.path, input.branch || 'main', {
+        content: input.content, commitMessage: input.message,
+      });
+    } catch {
+      await this.api.RepositoryFiles.create(projectPath, input.path, input.branch || 'main', {
+        content: input.content, commitMessage: input.message,
+      });
+    }
+  }
+
+  async deleteFile(owner: string, repo: string, path: string, message: string, branch?: string): Promise<void> {
+    await this.api.RepositoryFiles.remove(this.getProjectPath(owner, repo), path, branch || 'main', { commitMessage: message });
+  }
+
+  async searchCode(owner: string, repo: string, query: string): Promise<import('./types.js').CodeSearchResult[]> {
+    const results = await this.api.Search.all('blobs', query, { projectId: this.getProjectPath(owner, repo) });
+    return (results || []).map((r: any) => ({ path: String(r.filename || ''), matches: [{ line: 0, content: String(r.data || '') }] }));
+  }
+
+  async createBranch(owner: string, repo: string, branchName: string, fromRef: string): Promise<import('./types.js').GitBranch> {
+    const branch = await this.api.Branches.create(this.getProjectPath(owner, repo), branchName, fromRef);
+    return { name: String((branch as any).name), sha: String((branch as any).commit?.id || ''), isDefault: false, isProtected: false };
+  }
+
+  async createPullRequest(owner: string, repo: string, input: import('./types.js').CreatePullRequestInput): Promise<import('./types.js').GitPullRequest> {
+    const mr = await this.api.MergeRequests.create(this.getProjectPath(owner, repo), input.head, input.base, input.title, { description: input.body });
+    return {
+      id: String((mr as any).id), number: (mr as any).iid, title: input.title,
+      description: input.body, state: 'open', sourceBranch: input.head, targetBranch: input.base,
+      author: { id: String((mr as any).author?.id || ''), username: String((mr as any).author?.username || '') },
+      url: String((mr as any).web_url || ''), isDraft: false,
+      createdAt: new Date(), updatedAt: new Date(),
+    };
+  }
+
+  async listWorkflows(owner: string, repo: string): Promise<import('./types.js').GitWorkflow[]> {
+    const pipelines = await this.api.Pipelines.all(this.getProjectPath(owner, repo), { perPage: 20 });
+    return (pipelines || []).map((p: any) => ({ id: String(p.id), name: `Pipeline #${p.id}`, path: '.gitlab-ci.yml', state: 'active' as const }));
+  }
+
+  async getWorkflowConfig(owner: string, repo: string, _workflowId: string): Promise<string> {
+    return this.getFileContent(owner, repo, '.gitlab-ci.yml');
+  }
+
+  async triggerWorkflow(owner: string, repo: string, _workflowId: string, ref: string, inputs?: Record<string, string>): Promise<import('./types.js').GitWorkflowRun> {
+    const variables = inputs ? Object.entries(inputs).map(([key, value]) => ({ key, value, variable_type: 'env_var' })) : undefined;
+    const pipeline = await this.api.Pipelines.create(this.getProjectPath(owner, repo), { ref, variables } as any);
+    return {
+      id: String((pipeline as any).id), name: `Pipeline #${(pipeline as any).id}`,
+      status: 'queued', branch: ref, sha: String((pipeline as any).sha || ''),
+      url: String((pipeline as any).web_url || ''), createdAt: new Date(), updatedAt: new Date(),
+    };
+  }
+
+  async listEnvironments(owner: string, repo: string): Promise<import('./types.js').GitEnvironment[]> {
+    const envs = await this.api.Environments.all(this.getProjectPath(owner, repo));
+    return (envs || []).map((e: any) => ({ id: String(e.id), name: String(e.name), url: e.external_url }));
+  }
+
+  async getEnvironmentVariables(owner: string, repo: string, _envName: string): Promise<import('./types.js').GitVariable[]> {
+    const vars = await this.api.ProjectVariables.all(this.getProjectPath(owner, repo));
+    return (vars || []).map((v: any) => ({ name: String(v.key), value: String(v.value), isSecret: v.masked || false }));
+  }
+
+  async setEnvironmentVariable(owner: string, repo: string, _envName: string, name: string, value: string, isSecret = false): Promise<void> {
+    try {
+      await this.api.ProjectVariables.edit(this.getProjectPath(owner, repo), name, { value, masked: isSecret });
+    } catch {
+      await this.api.ProjectVariables.create(this.getProjectPath(owner, repo), { key: name, value, masked: isSecret } as any);
+    }
+  }
+
+  async deleteEnvironmentVariable(owner: string, repo: string, _envName: string, name: string): Promise<void> {
+    await this.api.ProjectVariables.remove(this.getProjectPath(owner, repo), name);
+  }
+
+  async getRepositoryVariables(owner: string, repo: string): Promise<import('./types.js').GitVariable[]> {
+    return this.getEnvironmentVariables(owner, repo, '');
+  }
+
+  async setRepositoryVariable(owner: string, repo: string, name: string, value: string, isSecret = false): Promise<void> {
+    return this.setEnvironmentVariable(owner, repo, '', name, value, isSecret);
+  }
+
+  async deleteRepositoryVariable(owner: string, repo: string, name: string): Promise<void> {
+    return this.deleteEnvironmentVariable(owner, repo, '', name);
+  }
+
+  async listDeployments(owner: string, repo: string, environment?: string): Promise<import('./types.js').GitDeployment[]> {
+    const deployments = await this.api.Deployments.all(this.getProjectPath(owner, repo), { environment });
+    return (deployments || []).map((d: any) => ({
+      id: String(d.id), environment: String(d.environment?.name || environment || ''),
+      status: 'success' as const, sha: String(d.sha || ''), createdAt: new Date(d.created_at),
+    }));
+  }
+
+  async createDeployment(owner: string, repo: string, ref: string, environment: string, description?: string): Promise<import('./types.js').GitDeployment> {
+    const env = await this.api.Environments.create(this.getProjectPath(owner, repo), { name: environment } as any).catch(() => null);
+    return { id: String(env ? (env as any).id : Date.now()), environment, status: 'pending', sha: ref, createdAt: new Date() };
+  }
+
+  async updateDeploymentStatus(_owner: string, _repo: string, _deploymentId: string, _state: 'success' | 'failure' | 'in_progress'): Promise<void> {
+    // GitLab deployments are managed through CI pipeline statuses
+  }
+
   // Webhook verification
   verifyWebhookSignature(payload: string | Buffer, signature: string, secret: string): boolean {
     return signature === secret;

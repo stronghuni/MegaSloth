@@ -153,6 +153,56 @@ export interface CreateReleaseInput {
   isPrerelease?: boolean;
 }
 
+export interface GitWorkflow {
+  id: string;
+  name: string;
+  path: string;
+  state: 'active' | 'disabled';
+}
+
+export interface GitEnvironment {
+  id: string;
+  name: string;
+  url?: string;
+  protectionRules?: string[];
+}
+
+export interface GitVariable {
+  name: string;
+  value: string;
+  isSecret: boolean;
+}
+
+export interface GitDeployment {
+  id: string;
+  environment: string;
+  status: 'pending' | 'in_progress' | 'success' | 'failure';
+  sha: string;
+  url?: string;
+  createdAt: Date;
+}
+
+export interface CreateFileInput {
+  path: string;
+  content: string;
+  message: string;
+  branch?: string;
+  sha?: string;
+}
+
+export interface CreatePullRequestInput {
+  title: string;
+  head: string;
+  base: string;
+  body?: string;
+  draft?: boolean;
+}
+
+export interface CodeSearchResult {
+  path: string;
+  matches: Array<{ line: number; content: string }>;
+}
+
 export interface GitDiff {
   files: GitPullRequestFile[];
   additions: number;
@@ -213,6 +263,32 @@ export interface GitProviderAdapter {
   // File operations
   getFileContent(owner: string, repo: string, path: string, ref?: string): Promise<string>;
   listFiles(owner: string, repo: string, path?: string, ref?: string): Promise<string[]>;
+  createOrUpdateFile(owner: string, repo: string, input: CreateFileInput): Promise<void>;
+  deleteFile(owner: string, repo: string, path: string, message: string, branch?: string, sha?: string): Promise<void>;
+  searchCode(owner: string, repo: string, query: string): Promise<CodeSearchResult[]>;
+
+  // Branch write operations
+  createBranch(owner: string, repo: string, branchName: string, fromRef: string): Promise<GitBranch>;
+  createPullRequest(owner: string, repo: string, input: CreatePullRequestInput): Promise<GitPullRequest>;
+
+  // CI/CD Pipeline management
+  listWorkflows(owner: string, repo: string): Promise<GitWorkflow[]>;
+  getWorkflowConfig(owner: string, repo: string, workflowId: string): Promise<string>;
+  triggerWorkflow(owner: string, repo: string, workflowId: string, ref: string, inputs?: Record<string, string>): Promise<GitWorkflowRun>;
+
+  // Environment & Variable management
+  listEnvironments(owner: string, repo: string): Promise<GitEnvironment[]>;
+  getEnvironmentVariables(owner: string, repo: string, envName: string): Promise<GitVariable[]>;
+  setEnvironmentVariable(owner: string, repo: string, envName: string, name: string, value: string, isSecret?: boolean): Promise<void>;
+  deleteEnvironmentVariable(owner: string, repo: string, envName: string, name: string): Promise<void>;
+  getRepositoryVariables(owner: string, repo: string): Promise<GitVariable[]>;
+  setRepositoryVariable(owner: string, repo: string, name: string, value: string, isSecret?: boolean): Promise<void>;
+  deleteRepositoryVariable(owner: string, repo: string, name: string): Promise<void>;
+
+  // Deployment management
+  listDeployments(owner: string, repo: string, environment?: string): Promise<GitDeployment[]>;
+  createDeployment(owner: string, repo: string, ref: string, environment: string, description?: string): Promise<GitDeployment>;
+  updateDeploymentStatus(owner: string, repo: string, deploymentId: string, state: 'success' | 'failure' | 'in_progress'): Promise<void>;
 
   // Webhook verification
   verifyWebhookSignature?(payload: string | Buffer, signature: string, secret: string): boolean;

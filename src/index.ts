@@ -43,7 +43,15 @@ export async function createMegaSloth(): Promise<MegaSloth> {
   const cacheStore = new CacheStore(config.redis);
 
   // Initialize agent core
+  const llmConfig = config.llm || (config.anthropic ? {
+    provider: 'claude' as const,
+    apiKey: config.anthropic.apiKey,
+    model: config.anthropic.model,
+    maxTokens: config.anthropic.maxTokens,
+  } : undefined);
+
   const agentCore = createAgentCore({
+    llmConfig,
     anthropicConfig: config.anthropic,
     gitAdapterConfigs: {
       github: config.github,

@@ -1,4 +1,5 @@
-import { ClaudeClient, type Message, type ContentBlock, type ToolDefinition } from './claude-client.js';
+import { type LLMProvider, type Message, type ContentBlock, type ToolDefinition, type LLMProviderConfig } from '../providers/types.js';
+import { createLLMProvider } from '../providers/factory.js';
 import { ToolRegistry, type ToolContext, createDefaultToolRegistry } from '../tools/registry.js';
 import { ContextManager, type ConversationOptions } from './context-manager.js';
 import { type GitProviderAdapter, type GitProvider } from '../adapters/git/types.js';
@@ -34,20 +35,32 @@ export interface AgentResult {
 }
 
 export interface AgentCoreDeps {
-  anthropicConfig: AnthropicConfig;
+  anthropicConfig?: AnthropicConfig;
+  llmConfig?: LLMProviderConfig;
   gitAdapterConfigs: GitAdapterConfigs;
   metadataStore: MetadataStore;
 }
 
 export class AgentCore {
-  private claude: ClaudeClient;
+  private llm: LLMProvider;
   private toolRegistry: ToolRegistry;
   private contextManager: ContextManager;
   private gitAdapterFactory: GitAdapterFactory;
   private logger = getLogger('agent-core');
 
   constructor(deps: AgentCoreDeps) {
-    this.claude = new ClaudeClient(deps.anthropicConfig);
+    if (deps.llmConfig) {
+      this.llm = createLLMProvider(deps.llmConfig);
+    } else if (deps.anthropicConfig) {
+      this.llm = createLLMProvider({
+        provider: 'claude',
+        apiKey: deps.anthropicConfig.apiKey,
+        model: deps.anthropicConfig.model,
+        maxTokens: deps.anthropicConfig.maxTokens,
+      });
+    } else {
+      throw new Error('Either llmConfig or anthropicConfig must be provided');
+    }
     this.toolRegistry = createDefaultToolRegistry();
     this.contextManager = new ContextManager(deps.metadataStore);
     this.gitAdapterFactory = new GitAdapterFactory(deps.gitAdapterConfigs);
@@ -105,7 +118,7 @@ export class AgentCore {
       while (turns < maxTurns) {
         turns++;
 
-        const response = await this.claude.chat(messages, {
+        const response = await this.llm.chat(messages, {
           system: task.systemPrompt,
           tools,
         });

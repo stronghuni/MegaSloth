@@ -1,0 +1,612 @@
+#!/usr/bin/env bash
+#
+#   MegaSloth Installer
+#   AI-Powered Repository Operations Agent
+#
+#   Usage:
+#     curl -fsSL https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.sh | bash
+#
+set -euo pipefail
+
+# ─────────────────────────────────────────────────────
+# Constants
+# ─────────────────────────────────────────────────────
+MEGASLOTH_REPO="https://github.com/stronghuni/MegaSloth.git"
+MEGASLOTH_DIR="${MEGASLOTH_HOME:-$HOME/.megasloth-app}"
+MEGASLOTH_BIN="/usr/local/bin/megasloth"
+REQUIRED_NODE_MAJOR=22
+MIN_NODE_MAJOR=20
+
+# ─────────────────────────────────────────────────────
+# Colors & UI
+# ─────────────────────────────────────────────────────
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+DIM='\033[2m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+print_banner() {
+  echo ""
+  echo -e "${CYAN}${BOLD}"
+  echo "  ╔══════════════════════════════════════════════════════╗"
+  echo "  ║                                                      ║"
+  echo "  ║          🦥  M E G A S L O T H                      ║"
+  echo "  ║                                                      ║"
+  echo "  ║    AI-Powered Repository Operations Agent            ║"
+  echo "  ║                                                      ║"
+  echo "  ╚══════════════════════════════════════════════════════╝"
+  echo -e "${NC}"
+  echo ""
+}
+
+info()    { echo -e "  ${BLUE}▸${NC} $1"; }
+success() { echo -e "  ${GREEN}✓${NC} $1"; }
+warn()    { echo -e "  ${YELLOW}⚠${NC} $1"; }
+error()   { echo -e "  ${RED}✗${NC} $1"; }
+step()    { echo -e "\n  ${MAGENTA}${BOLD}[$1/$TOTAL_STEPS]${NC} ${WHITE}$2${NC}\n"; }
+ask()     { echo -ne "  ${CYAN}?${NC} $1"; }
+
+TOTAL_STEPS=6
+
+# ─────────────────────────────────────────────────────
+# OS Detection
+# ─────────────────────────────────────────────────────
+detect_os() {
+  OS="unknown"
+  ARCH="$(uname -m)"
+
+  case "$(uname -s)" in
+    Darwin)  OS="macos" ;;
+    Linux)   OS="linux" ;;
+    MINGW*|MSYS*|CYGWIN*) OS="windows" ;;
+  esac
+
+  if [ "$OS" = "unknown" ]; then
+    error "Unsupported operating system: $(uname -s)"
+    echo ""
+    echo "  MegaSloth supports: macOS, Linux, and Windows (WSL)"
+    echo "  For Windows, install WSL first:"
+    echo "    https://learn.microsoft.com/en-us/windows/wsl/install"
+    echo ""
+    exit 1
+  fi
+}
+
+# ─────────────────────────────────────────────────────
+# Dependency Checks
+# ─────────────────────────────────────────────────────
+check_command() {
+  command -v "$1" &>/dev/null
+}
+
+get_node_version() {
+  if check_command node; then
+    node -v 2>/dev/null | sed 's/v//' | cut -d'.' -f1
+  else
+    echo "0"
+  fi
+}
+
+install_node() {
+  info "Node.js >= $REQUIRED_NODE_MAJOR is required"
+
+  if [ "$OS" = "macos" ]; then
+    if check_command brew; then
+      info "Installing Node.js via Homebrew..."
+      brew install node@$REQUIRED_NODE_MAJOR
+      brew link --overwrite node@$REQUIRED_NODE_MAJOR 2>/dev/null || true
+    else
+      info "Installing Homebrew first..."
+      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+      # Add Homebrew to PATH for Apple Silicon
+      if [ -f "/opt/homebrew/bin/brew" ]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+      fi
+      brew install node@$REQUIRED_NODE_MAJOR
+      brew link --overwrite node@$REQUIRED_NODE_MAJOR 2>/dev/null || true
+    fi
+  elif [ "$OS" = "linux" ]; then
+    if check_command apt-get; then
+      info "Installing Node.js via NodeSource (apt)..."
+      curl -fsSL https://deb.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x | sudo -E bash -
+      sudo apt-get install -y nodejs
+    elif check_command dnf; then
+      info "Installing Node.js via NodeSource (dnf)..."
+      curl -fsSL https://rpm.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x | sudo bash -
+      sudo dnf install -y nodejs
+    elif check_command yum; then
+      info "Installing Node.js via NodeSource (yum)..."
+      curl -fsSL https://rpm.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x | sudo bash -
+      sudo yum install -y nodejs
+    elif check_command pacman; then
+      info "Installing Node.js via pacman..."
+      sudo pacman -Sy --noconfirm nodejs npm
+    else
+      error "Could not detect package manager."
+      echo "  Please install Node.js >= $REQUIRED_NODE_MAJOR manually:"
+      echo "    https://nodejs.org/en/download"
+      exit 1
+    fi
+  fi
+}
+
+install_redis() {
+  if [ "$OS" = "macos" ]; then
+    if check_command brew; then
+      info "Installing Redis via Homebrew..."
+      brew install redis
+      brew services start redis 2>/dev/null || true
+    fi
+  elif [ "$OS" = "linux" ]; then
+    if check_command apt-get; then
+      info "Installing Redis via apt..."
+      sudo apt-get install -y redis-server
+      sudo systemctl enable redis-server 2>/dev/null || sudo service redis-server start 2>/dev/null || true
+    elif check_command dnf; then
+      sudo dnf install -y redis
+      sudo systemctl enable --now redis 2>/dev/null || true
+    elif check_command yum; then
+      sudo yum install -y redis
+      sudo systemctl enable --now redis 2>/dev/null || true
+    elif check_command pacman; then
+      sudo pacman -Sy --noconfirm redis
+      sudo systemctl enable --now redis 2>/dev/null || true
+    fi
+  fi
+}
+
+install_pnpm() {
+  if ! check_command pnpm; then
+    info "Installing pnpm..."
+    npm install -g pnpm@latest 2>/dev/null || sudo npm install -g pnpm@latest
+    success "pnpm installed"
+  fi
+}
+
+# ─────────────────────────────────────────────────────
+# Interactive Setup
+# ─────────────────────────────────────────────────────
+run_setup_wizard() {
+  echo -e "\n  ${WHITE}${BOLD}── Setup Wizard ──${NC}\n"
+  echo -e "  ${DIM}Configure your MegaSloth instance. Press Enter to skip optional fields.${NC}\n"
+
+  # LLM Provider
+  echo -e "  ${WHITE}Which AI provider would you like to use?${NC}"
+  echo -e "  ${DIM}  1) Claude  (Anthropic) — recommended${NC}"
+  echo -e "  ${DIM}  2) OpenAI  (GPT-4o)${NC}"
+  echo -e "  ${DIM}  3) Gemini  (Google)${NC}"
+  echo ""
+  ask "Choose [1/2/3] (default: 1): "
+  read -r llm_choice
+  echo ""
+
+  case "$llm_choice" in
+    2) LLM_PROVIDER="openai" ;;
+    3) LLM_PROVIDER="gemini" ;;
+    *) LLM_PROVIDER="claude" ;;
+  esac
+
+  success "LLM Provider: ${BOLD}$LLM_PROVIDER${NC}"
+
+  # API Key
+  case "$LLM_PROVIDER" in
+    claude)
+      ask "Anthropic API Key (sk-ant-...): "
+      read -rs api_key; echo ""
+      API_KEY_VAR="ANTHROPIC_API_KEY"
+      ;;
+    openai)
+      ask "OpenAI API Key (sk-...): "
+      read -rs api_key; echo ""
+      API_KEY_VAR="OPENAI_API_KEY"
+      ;;
+    gemini)
+      ask "Google Gemini API Key (AIza...): "
+      read -rs api_key; echo ""
+      API_KEY_VAR="GEMINI_API_KEY"
+      ;;
+  esac
+
+  if [ -n "${api_key:-}" ]; then
+    success "API Key: ****${api_key: -4}"
+  else
+    warn "No API key provided — you can set it later in .env"
+  fi
+
+  # GitHub Token
+  echo ""
+  echo -e "  ${WHITE}Git Platform Setup ${DIM}(optional — can be configured later)${NC}"
+  echo ""
+  ask "GitHub Personal Access Token (ghp_...): "
+  read -rs github_token; echo ""
+
+  if [ -n "${github_token:-}" ]; then
+    success "GitHub Token: ****${github_token: -4}"
+  fi
+
+  ask "GitHub Webhook Secret (press Enter to auto-generate): "
+  read -r webhook_secret
+  if [ -z "${webhook_secret:-}" ]; then
+    webhook_secret=$(openssl rand -hex 20 2>/dev/null || head -c 40 /dev/urandom | od -A n -t x1 | tr -d ' \n')
+    success "Webhook Secret: auto-generated"
+  fi
+
+  # Write .env
+  cat > "$MEGASLOTH_DIR/.env" <<ENVEOF
+# ═══════════════════════════════════════════════════════
+#  MegaSloth Configuration
+#  Generated by install.sh on $(date +%Y-%m-%d)
+# ═══════════════════════════════════════════════════════
+
+# LLM Provider: claude | openai | gemini
+LLM_PROVIDER=${LLM_PROVIDER}
+
+# API Keys (set the one matching your provider)
+ANTHROPIC_API_KEY=${LLM_PROVIDER == "claude" && api_key:-}
+OPENAI_API_KEY=${LLM_PROVIDER == "openai" && api_key:-}
+GEMINI_API_KEY=${LLM_PROVIDER == "gemini" && api_key:-}
+
+# GitHub
+GITHUB_TOKEN=${github_token:-}
+GITHUB_WEBHOOK_SECRET=${webhook_secret}
+
+# Server Ports
+HTTP_PORT=13000
+WEBHOOK_PORT=3001
+WEBSOCKET_PORT=18789
+
+# Redis
+REDIS_URL=redis://localhost:6379
+
+# Database
+DATABASE_URL=${MEGASLOTH_DIR}/.megasloth/data/megasloth.db
+
+# Logging
+LOG_LEVEL=info
+ENVEOF
+
+  # Fix the env file with proper values
+  if [ "$LLM_PROVIDER" = "claude" ]; then
+    sed -i.bak "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=${api_key:-}|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
+    sed -i '' "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=${api_key:-}|" "$MEGASLOTH_DIR/.env"
+    sed -i.bak "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
+    sed -i '' "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=|" "$MEGASLOTH_DIR/.env"
+    sed -i.bak "s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
+    sed -i '' "s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=|" "$MEGASLOTH_DIR/.env"
+  elif [ "$LLM_PROVIDER" = "openai" ]; then
+    sed -i.bak "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
+    sed -i '' "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=|" "$MEGASLOTH_DIR/.env"
+    sed -i.bak "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=${api_key:-}|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
+    sed -i '' "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=${api_key:-}|" "$MEGASLOTH_DIR/.env"
+    sed -i.bak "s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
+    sed -i '' "s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=|" "$MEGASLOTH_DIR/.env"
+  elif [ "$LLM_PROVIDER" = "gemini" ]; then
+    sed -i.bak "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
+    sed -i '' "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=|" "$MEGASLOTH_DIR/.env"
+    sed -i.bak "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
+    sed -i '' "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=|" "$MEGASLOTH_DIR/.env"
+    sed -i.bak "s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=${api_key:-}|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
+    sed -i '' "s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=${api_key:-}|" "$MEGASLOTH_DIR/.env"
+  fi
+
+  # Clean up backup files from sed
+  rm -f "$MEGASLOTH_DIR/.env.bak"
+}
+
+# ─────────────────────────────────────────────────────
+# Main Installation Flow
+# ─────────────────────────────────────────────────────
+main() {
+  print_banner
+  detect_os
+
+  info "Detected OS: ${BOLD}$OS${NC} (${ARCH})"
+  echo ""
+
+  # ── Step 1: Check Node.js ──
+  step 1 "Checking Node.js"
+
+  NODE_VERSION=$(get_node_version)
+  if [ "$NODE_VERSION" -ge "$MIN_NODE_MAJOR" ] 2>/dev/null; then
+    success "Node.js v$(node -v 2>/dev/null | sed 's/v//') found"
+  else
+    warn "Node.js >= $REQUIRED_NODE_MAJOR not found"
+    ask "Install Node.js $REQUIRED_NODE_MAJOR automatically? [Y/n]: "
+    read -r yn
+    case "$yn" in
+      [nN]*)
+        error "Node.js is required. Install it from https://nodejs.org"
+        exit 1
+        ;;
+      *)
+        install_node
+        success "Node.js installed: v$(node -v 2>/dev/null | sed 's/v//')"
+        ;;
+    esac
+  fi
+
+  install_pnpm
+
+  # ── Step 2: Check Redis ──
+  step 2 "Checking Redis"
+
+  if check_command redis-server || check_command redis-cli; then
+    success "Redis found"
+    # Try to start if not running
+    redis-cli ping &>/dev/null || {
+      warn "Redis is installed but not running"
+      if [ "$OS" = "macos" ]; then
+        brew services start redis 2>/dev/null && success "Redis started" || warn "Start Redis manually: redis-server"
+      else
+        sudo systemctl start redis-server 2>/dev/null || sudo systemctl start redis 2>/dev/null || warn "Start Redis manually: redis-server"
+      fi
+    }
+  else
+    warn "Redis not found"
+    ask "Install Redis automatically? [Y/n]: "
+    read -r yn
+    case "$yn" in
+      [nN]*)
+        warn "Redis is required for the job queue."
+        warn "Install it later: https://redis.io/docs/install/"
+        ;;
+      *)
+        install_redis
+        success "Redis installed and started"
+        ;;
+    esac
+  fi
+
+  # ── Step 3: Download MegaSloth ──
+  step 3 "Downloading MegaSloth"
+
+  if [ -d "$MEGASLOTH_DIR" ]; then
+    info "Existing installation found, updating..."
+    cd "$MEGASLOTH_DIR"
+    git pull origin main 2>/dev/null || {
+      warn "Could not update, performing fresh install..."
+      cd "$HOME"
+      rm -rf "$MEGASLOTH_DIR"
+      git clone --depth 1 "$MEGASLOTH_REPO" "$MEGASLOTH_DIR"
+      cd "$MEGASLOTH_DIR"
+    }
+  else
+    git clone --depth 1 "$MEGASLOTH_REPO" "$MEGASLOTH_DIR"
+    cd "$MEGASLOTH_DIR"
+  fi
+
+  success "Downloaded to $MEGASLOTH_DIR"
+
+  # ── Step 4: Install Dependencies & Build ──
+  step 4 "Installing dependencies"
+
+  pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+  success "Dependencies installed"
+
+  info "Building MegaSloth..."
+  pnpm build 2>/dev/null || {
+    warn "TypeScript build skipped (will use tsx for dev mode)"
+  }
+  success "Build complete"
+
+  # Create data directories
+  mkdir -p .megasloth/data .megasloth/skills
+
+  # ── Step 5: Setup Wizard ──
+  step 5 "Configuration"
+
+  if [ -t 0 ]; then
+    # Interactive terminal
+    run_setup_wizard
+  else
+    # Non-interactive (piped) — create default env
+    warn "Non-interactive mode — creating default .env"
+    cp .env.example .env 2>/dev/null || true
+    info "Edit $MEGASLOTH_DIR/.env to configure your API keys"
+  fi
+
+  success "Configuration saved to $MEGASLOTH_DIR/.env"
+
+  # ── Step 6: Create Global Command ──
+  step 6 "Creating megasloth command"
+
+  # Create wrapper script
+  WRAPPER_SCRIPT=$(cat <<'WRAPPER'
+#!/usr/bin/env bash
+MEGASLOTH_DIR="INSTALL_DIR_PLACEHOLDER"
+
+case "${1:-}" in
+  start)
+    echo ""
+    echo "  🦥 Starting MegaSloth..."
+    echo ""
+    cd "$MEGASLOTH_DIR"
+    if [ -f "dist/index.js" ]; then
+      node dist/index.js
+    else
+      npx tsx src/index.ts
+    fi
+    ;;
+  start:bg)
+    echo ""
+    echo "  🦥 Starting MegaSloth in background..."
+    cd "$MEGASLOTH_DIR"
+    if [ -f "dist/index.js" ]; then
+      nohup node dist/index.js > .megasloth/data/megasloth.log 2>&1 &
+    else
+      nohup npx tsx src/index.ts > .megasloth/data/megasloth.log 2>&1 &
+    fi
+    echo $! > .megasloth/data/megasloth.pid
+    echo "  ✓ MegaSloth running in background (PID: $!)"
+    echo "  ✓ Logs: $MEGASLOTH_DIR/.megasloth/data/megasloth.log"
+    echo ""
+    ;;
+  stop)
+    PID_FILE="$MEGASLOTH_DIR/.megasloth/data/megasloth.pid"
+    if [ -f "$PID_FILE" ]; then
+      PID=$(cat "$PID_FILE")
+      if kill -0 "$PID" 2>/dev/null; then
+        kill "$PID"
+        rm -f "$PID_FILE"
+        echo "  ✓ MegaSloth stopped (PID: $PID)"
+      else
+        rm -f "$PID_FILE"
+        echo "  MegaSloth was not running"
+      fi
+    else
+      echo "  MegaSloth is not running"
+    fi
+    ;;
+  status)
+    PID_FILE="$MEGASLOTH_DIR/.megasloth/data/megasloth.pid"
+    echo ""
+    echo "  🦥 MegaSloth Status"
+    echo ""
+    echo "  Install dir: $MEGASLOTH_DIR"
+    if [ -f "$PID_FILE" ]; then
+      PID=$(cat "$PID_FILE")
+      if kill -0 "$PID" 2>/dev/null; then
+        echo "  Status:      ✓ Running (PID: $PID)"
+      else
+        echo "  Status:      ✗ Not running (stale PID)"
+      fi
+    else
+      echo "  Status:      ✗ Not running"
+    fi
+    redis-cli ping &>/dev/null && echo "  Redis:       ✓ Connected" || echo "  Redis:       ✗ Not reachable"
+    curl -sf http://localhost:13000/health &>/dev/null && echo "  HTTP API:    ✓ Healthy" || echo "  HTTP API:    ✗ Not reachable"
+    echo ""
+    ;;
+  logs)
+    LOG_FILE="$MEGASLOTH_DIR/.megasloth/data/megasloth.log"
+    if [ -f "$LOG_FILE" ]; then
+      tail -f "$LOG_FILE"
+    else
+      echo "  No log file found. Start MegaSloth first: megasloth start:bg"
+    fi
+    ;;
+  config)
+    "${EDITOR:-nano}" "$MEGASLOTH_DIR/.env"
+    ;;
+  update)
+    echo "  🦥 Updating MegaSloth..."
+    cd "$MEGASLOTH_DIR"
+    git pull origin main
+    pnpm install
+    pnpm build 2>/dev/null || true
+    echo "  ✓ MegaSloth updated!"
+    ;;
+  uninstall)
+    echo ""
+    echo "  ⚠  This will remove MegaSloth from your system."
+    echo -n "  Are you sure? [y/N]: "
+    read -r yn
+    case "$yn" in
+      [yY]*)
+        rm -rf "$MEGASLOTH_DIR"
+        rm -f "SELF_PATH_PLACEHOLDER"
+        echo "  ✓ MegaSloth has been uninstalled."
+        ;;
+      *)
+        echo "  Cancelled."
+        ;;
+    esac
+    ;;
+  help|--help|-h|"")
+    echo ""
+    echo "  🦥 MegaSloth - AI-Powered Repository Operations Agent"
+    echo ""
+    echo "  Usage: megasloth <command>"
+    echo ""
+    echo "  Commands:"
+    echo "    start       Start MegaSloth (foreground)"
+    echo "    start:bg    Start MegaSloth (background daemon)"
+    echo "    stop        Stop background MegaSloth"
+    echo "    status      Show current status"
+    echo "    logs        Follow log output"
+    echo "    config      Edit configuration (.env)"
+    echo "    update      Update to latest version"
+    echo "    uninstall   Remove MegaSloth"
+    echo "    help        Show this help message"
+    echo ""
+    echo "  Docs: https://github.com/stronghuni/MegaSloth"
+    echo ""
+    ;;
+  *)
+    echo "  Unknown command: $1"
+    echo "  Run 'megasloth help' for usage"
+    exit 1
+    ;;
+esac
+WRAPPER
+  )
+
+  # Replace placeholders
+  WRAPPER_SCRIPT="${WRAPPER_SCRIPT//INSTALL_DIR_PLACEHOLDER/$MEGASLOTH_DIR}"
+
+  # Determine install path
+  if [ -w "/usr/local/bin" ]; then
+    INSTALL_BIN="/usr/local/bin/megasloth"
+  elif [ -d "$HOME/.local/bin" ]; then
+    INSTALL_BIN="$HOME/.local/bin/megasloth"
+  else
+    mkdir -p "$HOME/.local/bin"
+    INSTALL_BIN="$HOME/.local/bin/megasloth"
+  fi
+
+  WRAPPER_SCRIPT="${WRAPPER_SCRIPT//SELF_PATH_PLACEHOLDER/$INSTALL_BIN}"
+
+  echo "$WRAPPER_SCRIPT" > "$INSTALL_BIN"
+  chmod +x "$INSTALL_BIN"
+  success "Command installed: $INSTALL_BIN"
+
+  # Check if bin is in PATH
+  if ! echo "$PATH" | grep -q "$(dirname "$INSTALL_BIN")"; then
+    warn "$(dirname "$INSTALL_BIN") is not in your PATH"
+
+    SHELL_RC=""
+    case "$SHELL" in
+      */zsh)  SHELL_RC="$HOME/.zshrc" ;;
+      */bash) SHELL_RC="$HOME/.bashrc" ;;
+      */fish) SHELL_RC="$HOME/.config/fish/config.fish" ;;
+    esac
+
+    if [ -n "$SHELL_RC" ]; then
+      echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> "$SHELL_RC"
+      info "Added to $SHELL_RC — restart your terminal or run:"
+      echo -e "    ${DIM}source $SHELL_RC${NC}"
+    fi
+  fi
+
+  # ── Done! ──
+  echo ""
+  echo -e "  ${GREEN}${BOLD}══════════════════════════════════════════════════════${NC}"
+  echo -e "  ${GREEN}${BOLD}  🦥  MegaSloth installed successfully!${NC}"
+  echo -e "  ${GREEN}${BOLD}══════════════════════════════════════════════════════${NC}"
+  echo ""
+  echo -e "  ${WHITE}Quick Start:${NC}"
+  echo ""
+  echo -e "    ${CYAN}megasloth start${NC}       Start in foreground"
+  echo -e "    ${CYAN}megasloth start:bg${NC}    Start as background daemon"
+  echo -e "    ${CYAN}megasloth status${NC}      Check if running"
+  echo -e "    ${CYAN}megasloth config${NC}      Edit configuration"
+  echo -e "    ${CYAN}megasloth logs${NC}        View live logs"
+  echo -e "    ${CYAN}megasloth help${NC}        Show all commands"
+  echo ""
+  echo -e "  ${WHITE}Webhook URLs (configure in your Git platform):${NC}"
+  echo ""
+  echo -e "    GitHub:    ${DIM}https://your-server:3001/webhook/github${NC}"
+  echo -e "    GitLab:    ${DIM}https://your-server:3001/webhook/gitlab${NC}"
+  echo -e "    Bitbucket: ${DIM}https://your-server:3001/webhook/bitbucket${NC}"
+  echo ""
+  echo -e "  ${WHITE}Docs:${NC} ${BLUE}https://github.com/stronghuni/MegaSloth${NC}"
+  echo ""
+}
+
+main "$@"

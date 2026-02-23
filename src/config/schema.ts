@@ -22,6 +22,13 @@ export const anthropicConfigSchema = z.object({
   maxTokens: z.number().default(4096),
 });
 
+export const llmConfigSchema = z.object({
+  provider: z.enum(['claude', 'openai', 'gemini']).default('claude'),
+  apiKey: z.string(),
+  model: z.string().optional(),
+  maxTokens: z.number().default(4096),
+});
+
 export const githubConfigSchema = z.object({
   token: z.string().optional(),
   webhookSecret: z.string().optional(),
@@ -55,7 +62,8 @@ export const configSchema = z.object({
   server: serverConfigSchema.default({}),
   database: databaseConfigSchema.default({}),
   redis: redisConfigSchema.default({}),
-  anthropic: anthropicConfigSchema,
+  anthropic: anthropicConfigSchema.optional(),
+  llm: llmConfigSchema.optional(),
   github: githubConfigSchema.default({}),
   gitlab: gitlabConfigSchema.default({}),
   bitbucket: bitbucketConfigSchema.default({}),
@@ -72,4 +80,5 @@ export type GitLabConfig = z.infer<typeof gitlabConfigSchema>;
 export type BitbucketConfig = z.infer<typeof bitbucketConfigSchema>;
 export type SlackConfig = z.infer<typeof slackConfigSchema>;
 export type LoggingConfig = z.infer<typeof loggingConfigSchema>;
+export type LLMConfig = z.infer<typeof llmConfigSchema>;
 export type Config = z.infer<typeof configSchema>;

@@ -1,0 +1,8 @@
+node_modules
+dist
+.megasloth/data
+.megabot
+.env
+.env.local
+.git
+.claude

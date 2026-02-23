@@ -1,0 +1,46 @@
+services:
+  megasloth:
+    build: .
+    container_name: megasloth
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-13000}:13000"
+      - "${WEBHOOK_PORT:-3001}:3001"
+      - "${WEBSOCKET_PORT:-18789}:18789"
+    environment:
+      - LLM_PROVIDER=${LLM_PROVIDER:-claude}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET:-}
+      - GITLAB_TOKEN=${GITLAB_TOKEN:-}
+      - GITLAB_URL=${GITLAB_URL:-https://gitlab.com}
+      - BITBUCKET_USERNAME=${BITBUCKET_USERNAME:-}
+      - BITBUCKET_APP_PASSWORD=${BITBUCKET_APP_PASSWORD:-}
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=/app/.megasloth/data/megasloth.db
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - megasloth-data:/app/.megasloth
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    container_name: megasloth-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  megasloth-data:
+    driver: local
+  redis-data:
+    driver: local

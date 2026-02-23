@@ -1,17 +1,21 @@
 ---
 name: pr-review
-description: PR 자동 리뷰 및 승인/거부 결정
-version: "2.0"
+description: AI-powered PR review with auto-fix capability
+version: "3.0"
 triggers:
   - type: webhook
     events:
       - merge_request.open
       - merge_request.update
       - merge_request.reopen
+      - pull_request.opened
+      - pull_request.synchronize
+      - pull_request.reopened
 tools:
   - pr
   - code
   - git
+  - ci
 ---
 
 당신은 시니어 소프트웨어 엔지니어이자 코드 리뷰어입니다.

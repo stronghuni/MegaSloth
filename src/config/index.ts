@@ -56,6 +56,12 @@ function loadEnvConfig(): Record<string, unknown> {
       model: process.env.ANTHROPIC_MODEL,
       maxTokens: process.env.ANTHROPIC_MAX_TOKENS ? parseInt(process.env.ANTHROPIC_MAX_TOKENS, 10) : undefined,
     },
+    llm: {
+      provider: process.env.LLM_PROVIDER as 'claude' | 'openai' | 'gemini' | undefined,
+      apiKey: process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY,
+      model: process.env.LLM_MODEL,
+      maxTokens: process.env.LLM_MAX_TOKENS ? parseInt(process.env.LLM_MAX_TOKENS, 10) : undefined,
+    },
     github: {
       token: process.env.GITHUB_TOKEN,
       webhookSecret: process.env.GITHUB_WEBHOOK_SECRET,
