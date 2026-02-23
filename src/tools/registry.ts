@@ -30,6 +30,10 @@ export class ToolRegistry {
     return this.tools.get(name);
   }
 
+  getTools(): RegisteredTool[] {
+    return Array.from(this.tools.values());
+  }
+
   getDefinitions(categories?: string[]): ToolDefinition[] {
     const tools = Array.from(this.tools.values());
     if (categories) {
