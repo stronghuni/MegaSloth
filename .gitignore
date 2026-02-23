@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# MegaSloth data
+.megasloth/data/
+!.megasloth/data/.gitkeep
+.megabot/
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+coverage/
+
+# Drizzle
+drizzle/
+
+# Temporary files
+*.tmp
+*.temp
+.claude/
