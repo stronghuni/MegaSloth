@@ -38,6 +38,7 @@ drizzle/
 *.tmp
 *.temp
 .claude/
+
+# Credential vault
 *.enc.json
-.megasloth/data/
 .megasloth/test-*
