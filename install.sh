@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-#   MegaSloth Desktop App Installer
-#   Full Automation Agent — One API Key, Total Control
+#   MegaSloth Installer
+#   Downloads and installs the MegaSloth desktop app.
 #
 #   Usage:
 #     curl -fsSL https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.sh | bash
@@ -9,94 +9,49 @@
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────
-# Constants
-# ─────────────────────────────────────────────────────
-MEGASLOTH_REPO="https://github.com/stronghuni/MegaSloth.git"
-MEGASLOTH_DIR="${MEGASLOTH_HOME:-$HOME/.megasloth-app}"
-REQUIRED_NODE_MAJOR=22
-MIN_NODE_MAJOR=20
+REPO="stronghuni/MegaSloth"
+GITHUB_API="https://api.github.com/repos/$REPO/releases/latest"
+GITHUB_DL="https://github.com/$REPO/releases/latest/download"
 
 # ─────────────────────────────────────────────────────
-# Colors & UI
+# Colors
 # ─────────────────────────────────────────────────────
-RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
-MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 WHITE='\033[1;37m'
 DIM='\033[2m'
 BOLD='\033[1m'
+RED='\033[0;31m'
 NC='\033[0m'
-
-print_banner() {
-  echo ""
-  echo -e "${GREEN}################################################################################${NC}"
-  echo -e "${GREEN}################################################################################${NC}"
-  echo -e "${GREEN}################################################################################${NC}"
-  echo -e "${GREEN}#########################+. *.   +*#############################################${NC}"
-  echo -e "${GREEN}#######################+..-:======+*:-##########################################${NC}"
-  echo -e "${GREEN}#####################*.========+###+=+.*########################################${NC}"
-  echo -e "${GREEN}####################+-==*#######*:--#=+=########################################${NC}"
-  echo -e "${GREEN}##############**+..#+-=#*..=#===-*+:===*-.*#####################################${NC}"
-  echo -e "${GREEN}#############**=+***=-=#.==+-  -==#=========+** .*##############################${NC}"
-  echo -e "${GREEN}############*******::.-===*+=.:==+*==============++=:+##########################${NC}"
-  echo -e "${GREEN}###########************-.--++++++====================+*:-#######################${NC}"
-  echo -e "${GREEN}##########=++++***********=-.-- ========================++:#####################${NC}"
-  echo -e "${GREEN}############*+ -++++***** **** -=====:=====================+:###################${NC}"
-  echo -e "${GREEN}#################* :=+++***** .===== .----------============+=##################${NC}"
-  echo -e "${GREEN}######################=:-=++*+.====-=***++-.::-------======== ##################${NC}"
-  echo -e "${GREEN}#######################.-=-::::====:*=-:=*****+:.---: -======:##################${NC}"
-  echo -e "${GREEN}####################### ---:=+:===-.++********=::+=.:======:.###################${NC}"
-  echo -e "${GREEN}####################### ----##.-=---+ -++++*******=-===== =++*+: *##############${NC}"
-  echo -e "${GREEN}#######################*:: ###.---.#####*.:=+++***.===:. :+********= =*#########${NC}"
-  echo -e "${GREEN}########################- :###+---.##########=:-=+.--:-+****-.=********#########${NC}"
-  echo -e "${GREEN}###############################*.  ############-.. :. =++***+*********##########${NC}"
-  echo -e "${GREEN}#################################+*#############=::.  +-.=+++*+=:-***###########${NC}"
-  echo -e "${GREEN}##########################################################*+ -++++**############${NC}"
-  echo -e "${GREEN}################################################################:.=#############${NC}"
-  echo -e "${GREEN}################################################################################${NC}"
-  echo -e "${GREEN}################################################################################${NC}"
-  echo -e "${GREEN}################################################################################${NC}"
-  echo ""
-  echo -e "${WHITE}${BOLD}                       M E G A S L O T H${NC}"
-  echo -e "${DIM}                     Rules Every Repos${NC}"
-  echo ""
-}
 
 info()    { echo -e "  ${BLUE}▸${NC} $1"; }
 success() { echo -e "  ${GREEN}✓${NC} $1"; }
 warn()    { echo -e "  ${YELLOW}⚠${NC} $1"; }
 error()   { echo -e "  ${RED}✗${NC} $1"; }
-step()    { echo -e "\n  ${MAGENTA}${BOLD}[$1/$TOTAL_STEPS]${NC} ${WHITE}$2${NC}\n"; }
-ask()     { echo -ne "  ${CYAN}?${NC} $1"; }
 
-TOTAL_STEPS=5
-
-CAN_PROMPT=false
-if [ -t 0 ]; then
-  CAN_PROMPT=true
-elif [ -e /dev/tty ]; then
-  CAN_PROMPT=true
-fi
-
-prompt_read() {
-  local var_name="$1"
-  local opts="${2:-}"
-  if [ -t 0 ]; then
-    read $opts -r "$var_name"
-  elif [ -e /dev/tty ]; then
-    read $opts -r "$var_name" </dev/tty
-  else
-    eval "$var_name=''"
-  fi
+print_banner() {
+  echo ""
+  echo -e "${GREEN}  #########+. *.   +*##############${NC}"
+  echo -e "${GREEN}  ########+..-:======+*:-##########${NC}"
+  echo -e "${GREEN}  #######*.========+###+=+.*#######${NC}"
+  echo -e "${GREEN}  ###**+..#+-=#*..=#===-*+:===*-.##${NC}"
+  echo -e "${GREEN}  ##**=+***=-=#.==+-  -==#=====+**${NC}"
+  echo -e "${GREEN}  #*******::.-===*+=.:==+*=========${NC}"
+  echo -e "${GREEN}  #=++++*******=-.-- ==============${NC}"
+  echo -e "${GREEN}  ###*+ -++++***** **** -=====:====${NC}"
+  echo -e "${GREEN}  #######* :=+++***** .===== .-----${NC}"
+  echo -e "${GREEN}  ##########*+ -++++**  :=+++++****${NC}"
+  echo ""
+  echo -e "${WHITE}${BOLD}  MegaSloth${NC} ${DIM}— Rules Every Repos${NC}"
+  echo ""
 }
 
 # ─────────────────────────────────────────────────────
-# OS Detection
+# OS / Arch Detection
 # ─────────────────────────────────────────────────────
-detect_os() {
+detect_platform() {
   OS="unknown"
   ARCH="$(uname -m)"
 
@@ -106,492 +61,242 @@ detect_os() {
     MINGW*|MSYS*|CYGWIN*) OS="windows" ;;
   esac
 
+  case "$ARCH" in
+    x86_64|amd64) ARCH="x64" ;;
+    arm64|aarch64) ARCH="arm64" ;;
+  esac
+
   if [ "$OS" = "unknown" ]; then
-    error "Unsupported operating system: $(uname -s)"
-    echo ""
-    echo "  Supported: macOS, Linux, Windows (WSL/MSYS/MINGW)"
-    echo ""
-    echo -e "  ${DIM}For native Windows, use PowerShell:${NC}"
-    echo -e "  ${CYAN}irm https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.ps1 | iex${NC}"
+    error "Unsupported OS: $(uname -s)"
+    echo -e "  ${DIM}Windows users: download from GitHub Releases or run PowerShell installer${NC}"
     exit 1
   fi
 }
 
 # ─────────────────────────────────────────────────────
-# Silent Dependency Installers
+# Download helpers
 # ─────────────────────────────────────────────────────
-check_command() { command -v "$1" &>/dev/null; }
-
-get_node_version() {
-  if check_command node; then
-    node -v 2>/dev/null | sed 's/v//' | cut -d'.' -f1
+download_file() {
+  local url="$1" dest="$2"
+  if command -v curl &>/dev/null; then
+    curl -fSL --progress-bar -o "$dest" "$url"
+  elif command -v wget &>/dev/null; then
+    wget -q --show-progress -O "$dest" "$url"
   else
-    echo "0"
+    error "curl or wget required"
+    exit 1
   fi
 }
 
-auto_install_node() {
-  if [ "$OS" = "macos" ]; then
-    if ! check_command brew; then
-      info "Installing Homebrew..."
-      NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/null
-      [ -f "/opt/homebrew/bin/brew" ] && eval "$(/opt/homebrew/bin/brew shellenv)"
-    fi
-    brew install node@$REQUIRED_NODE_MAJOR 2>/dev/null || true
-    brew link --overwrite node@$REQUIRED_NODE_MAJOR 2>/dev/null || true
-  elif [ "$OS" = "linux" ]; then
-    if check_command apt-get; then
-      curl -fsSL https://deb.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x | sudo -E bash -
-      sudo apt-get install -y nodejs
-    elif check_command dnf; then
-      curl -fsSL https://rpm.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x | sudo bash -
-      sudo dnf install -y nodejs
-    elif check_command yum; then
-      curl -fsSL https://rpm.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x | sudo bash -
-      sudo yum install -y nodejs
-    elif check_command pacman; then
-      sudo pacman -Sy --noconfirm nodejs npm
-    fi
-  elif [ "$OS" = "windows" ]; then
-    info "On Windows/MSYS, please install Node.js from https://nodejs.org"
+get_latest_version() {
+  local ver=""
+  if command -v curl &>/dev/null; then
+    ver=$(curl -fsSL "$GITHUB_API" 2>/dev/null | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+  elif command -v wget &>/dev/null; then
+    ver=$(wget -qO- "$GITHUB_API" 2>/dev/null | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+  fi
+  echo "$ver"
+}
+
+# ─────────────────────────────────────────────────────
+# Platform-specific installers
+# ─────────────────────────────────────────────────────
+install_macos() {
+  local dmg_name="MegaSloth-${ARCH}.dmg"
+  local dmg_path="/tmp/$dmg_name"
+
+  info "Downloading MegaSloth for macOS ($ARCH)..."
+  download_file "${GITHUB_DL}/${dmg_name}" "$dmg_path"
+
+  info "Installing..."
+  local mount_point
+  mount_point=$(hdiutil attach "$dmg_path" -nobrowse -quiet 2>/dev/null | tail -1 | awk '{print $3}')
+
+  if [ -z "$mount_point" ]; then
+    mount_point=$(hdiutil attach "$dmg_path" -nobrowse 2>/dev/null | grep "/Volumes" | sed 's/.*\(\/Volumes\/.*\)/\1/')
+  fi
+
+  local app_src
+  app_src=$(find "$mount_point" -name "MegaSloth.app" -maxdepth 2 -type d 2>/dev/null | head -1)
+
+  if [ -z "$app_src" ]; then
+    hdiutil detach "$mount_point" -quiet 2>/dev/null || true
+    error "Could not find MegaSloth.app in DMG"
+    exit 1
+  fi
+
+  rm -rf /Applications/MegaSloth.app 2>/dev/null || true
+  cp -R "$app_src" /Applications/
+  xattr -cr /Applications/MegaSloth.app 2>/dev/null || true
+
+  hdiutil detach "$mount_point" -quiet 2>/dev/null || true
+  rm -f "$dmg_path"
+
+  success "Installed to /Applications/MegaSloth.app"
+}
+
+install_linux() {
+  local appimage_name="MegaSloth.AppImage"
+  local install_dir="$HOME/.local/bin"
+  mkdir -p "$install_dir"
+
+  info "Downloading MegaSloth for Linux..."
+  download_file "${GITHUB_DL}/${appimage_name}" "$install_dir/$appimage_name"
+  chmod +x "$install_dir/$appimage_name"
+
+  if [ -f "$install_dir/$appimage_name" ]; then
+    ln -sf "$install_dir/$appimage_name" "$install_dir/megasloth"
+    success "Installed to $install_dir/$appimage_name"
   fi
 }
 
-auto_install_redis() {
-  if [ "$OS" = "macos" ]; then
-    if check_command brew; then
-      brew install redis 2>/dev/null || true
-      brew services start redis 2>/dev/null || true
-    fi
-  elif [ "$OS" = "linux" ]; then
-    if check_command apt-get; then
-      sudo apt-get install -y redis-server 2>/dev/null || true
-      sudo systemctl enable redis-server 2>/dev/null || sudo service redis-server start 2>/dev/null || true
-    elif check_command dnf; then
-      sudo dnf install -y redis 2>/dev/null || true
-      sudo systemctl enable --now redis 2>/dev/null || true
-    elif check_command pacman; then
-      sudo pacman -Sy --noconfirm redis 2>/dev/null || true
-      sudo systemctl enable --now redis 2>/dev/null || true
-    fi
-  fi
+install_windows() {
+  local exe_name="MegaSloth-Setup.exe"
+  local exe_path="$USERPROFILE/Downloads/$exe_name"
+
+  info "Downloading MegaSloth for Windows..."
+  download_file "${GITHUB_DL}/${exe_name}" "$exe_path"
+
+  success "Downloaded to $exe_path"
+  info "Running installer..."
+  start "" "$exe_path" 2>/dev/null || echo -e "  ${DIM}Open $exe_path to install${NC}"
 }
 
-auto_install_pnpm() {
-  if ! check_command pnpm; then
+# ─────────────────────────────────────────────────────
+# Fallback: build from source
+# ─────────────────────────────────────────────────────
+build_from_source() {
+  warn "No pre-built release found. Building from source..."
+  echo ""
+
+  local MEGASLOTH_DIR="${MEGASLOTH_HOME:-$HOME/.megasloth-app}"
+
+  if ! command -v node &>/dev/null; then
+    error "Node.js >= 22 required. Install from https://nodejs.org"
+    exit 1
+  fi
+
+  if ! command -v pnpm &>/dev/null; then
+    info "Installing pnpm..."
     npm install -g pnpm@latest 2>/dev/null || sudo npm install -g pnpm@latest
   fi
-}
-
-auto_install_gh() {
-  if [ "$OS" = "macos" ]; then
-    check_command brew && (brew install gh 2>/dev/null || true)
-  elif [ "$OS" = "linux" ]; then
-    if check_command apt-get; then
-      (type -p wget >/dev/null || sudo apt-get install -y wget) \
-        && sudo mkdir -p -m 755 /etc/apt/keyrings \
-        && wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
-        && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-        && sudo apt-get update && sudo apt-get install -y gh
-    elif check_command dnf; then
-      sudo dnf install -y 'dnf-command(config-manager)' 2>/dev/null && sudo dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo 2>/dev/null && sudo dnf install -y gh 2>/dev/null || true
-    elif check_command pacman; then
-      sudo pacman -Sy --noconfirm github-cli 2>/dev/null || true
-    fi
-  fi
-}
-
-# ─────────────────────────────────────────────────────
-# Main Installation Flow
-# ─────────────────────────────────────────────────────
-main() {
-  print_banner
-  detect_os
-
-  info "Detected: ${BOLD}$OS${NC} (${ARCH})"
-  echo ""
-  echo -e "  ${DIM}This installs the MegaSloth Desktop App (Electron).${NC}"
-  echo -e "  ${DIM}For CLI-only: npm install -g megasloth${NC}"
-  echo ""
-
-  # ═══════════════════════════════════════════════════
-  # STEP 1: Terms of Service
-  # ═══════════════════════════════════════════════════
-  step 1 "Terms of Service"
-
-  echo -e "  ${WHITE}MegaSloth Full Automation Agent${NC}"
-  echo ""
-  echo -e "  By installing MegaSloth, you agree to the following:"
-  echo ""
-  echo -e "  ${DIM}  1. MegaSloth will have full access to your local system"
-  echo -e "     including terminal, filesystem, browser, and clipboard.${NC}"
-  echo ""
-  echo -e "  ${DIM}  2. MegaSloth will automatically provision and manage"
-  echo -e "     API credentials (GitHub, GitLab, AWS, GCP, etc.)${NC}"
-  echo ""
-  echo -e "  ${DIM}  3. MegaSloth will execute shell commands, modify files,"
-  echo -e "     and interact with external services on your behalf.${NC}"
-  echo ""
-  echo -e "  ${DIM}  4. All credentials are encrypted (AES-256-GCM) and"
-  echo -e "     stored locally. Nothing is sent to third parties.${NC}"
-  echo ""
-  echo -e "  ${DIM}  5. You can revoke permissions anytime by changing"
-  echo -e "     the security profile (restricted/standard/full).${NC}"
-  echo ""
-
-  if [ "$CAN_PROMPT" = true ]; then
-    ask "Do you accept these terms? [y/N]: "
-    local accept=""
-    prompt_read accept
-    case "$accept" in
-      [yY]|[yY][eE][sS])
-        success "Terms accepted"
-        ;;
-      *)
-        error "You must accept the terms to install MegaSloth."
-        exit 1
-        ;;
-    esac
-  else
-    warn "Non-interactive mode — terms auto-accepted"
-  fi
-
-  # ═══════════════════════════════════════════════════
-  # STEP 2: LLM API Key
-  # ═══════════════════════════════════════════════════
-  step 2 "AI Provider Setup"
-
-  echo -e "  ${WHITE}Choose your AI provider:${NC}"
-  echo ""
-  echo -e "    ${CYAN}1)${NC} Claude  ${DIM}(Anthropic) — recommended${NC}"
-  echo -e "    ${CYAN}2)${NC} OpenAI  ${DIM}(GPT-5.2)${NC}"
-  echo -e "    ${CYAN}3)${NC} Gemini  ${DIM}(Google)${NC}"
-  echo ""
-
-  local llm_choice=""
-  if [ "$CAN_PROMPT" = true ]; then
-    ask "Choose [1/2/3] (default: 1): "
-    prompt_read llm_choice
-  else
-    llm_choice="1"
-  fi
-
-  local LLM_PROVIDER KEY_PREFIX KEY_LABEL
-  case "$llm_choice" in
-    2) LLM_PROVIDER="openai";  KEY_PREFIX="sk-";      KEY_LABEL="OpenAI API Key" ;;
-    3) LLM_PROVIDER="gemini";  KEY_PREFIX="AIza";     KEY_LABEL="Google Gemini API Key" ;;
-    *)  LLM_PROVIDER="claude";  KEY_PREFIX="sk-ant-";  KEY_LABEL="Anthropic API Key" ;;
-  esac
-
-  success "Provider: ${BOLD}$LLM_PROVIDER${NC}"
-  echo ""
-
-  local api_key=""
-  if [ "$CAN_PROMPT" = true ]; then
-    ask "${KEY_LABEL} (${KEY_PREFIX}...): "
-    prompt_read api_key "-s"
-    echo ""
-
-    if [ -n "${api_key:-}" ]; then
-      success "API Key: ****${api_key: -4}"
-    else
-      warn "No key entered — set it later in the app Settings"
-    fi
-  else
-    warn "Non-interactive mode — set API key in the app Settings"
-  fi
-
-  echo ""
-  echo -e "  ${GREEN}${BOLD}That's it! MegaSloth will handle everything else.${NC}"
-  echo -e "  ${DIM}  GitHub, GitLab, AWS, Redis — the agent provisions it all.${NC}"
-
-  # ═══════════════════════════════════════════════════
-  # STEP 3: Auto-install all dependencies
-  # ═══════════════════════════════════════════════════
-  step 3 "Installing dependencies (automatic)"
-
-  # Node.js
-  local NODE_VERSION
-  NODE_VERSION=$(get_node_version)
-  if [ "$NODE_VERSION" -ge "$MIN_NODE_MAJOR" ] 2>/dev/null; then
-    success "Node.js v$(node -v 2>/dev/null | sed 's/v//')"
-  else
-    info "Installing Node.js..."
-    auto_install_node
-    if check_command node; then
-      success "Node.js v$(node -v 2>/dev/null | sed 's/v//')"
-    else
-      error "Failed to install Node.js. Install manually: https://nodejs.org"
-      exit 1
-    fi
-  fi
-
-  # pnpm
-  auto_install_pnpm
-  check_command pnpm && success "pnpm $(pnpm -v 2>/dev/null)" || warn "pnpm not available"
-
-  # Redis
-  if [ "$OS" != "windows" ]; then
-    if redis-cli ping &>/dev/null 2>&1; then
-      success "Redis: running"
-    else
-      info "Installing Redis..."
-      auto_install_redis
-      redis-cli ping &>/dev/null 2>&1 && success "Redis: running" || warn "Redis: will start on first use"
-    fi
-  else
-    warn "Redis: install separately on Windows (https://github.com/tporadowski/redis)"
-  fi
-
-  # GitHub CLI
-  if check_command gh; then
-    success "GitHub CLI: $(gh --version 2>/dev/null | head -1 | awk '{print $3}')"
-  else
-    info "Installing GitHub CLI..."
-    auto_install_gh
-    check_command gh && success "GitHub CLI: installed" || info "GitHub CLI: agent will use OAuth Device Flow instead"
-  fi
-
-  # ═══════════════════════════════════════════════════
-  # STEP 4: Download, build, install app
-  # ═══════════════════════════════════════════════════
-  step 4 "Installing MegaSloth Desktop App"
 
   if [ -d "$MEGASLOTH_DIR/.git" ]; then
-    info "Updating existing installation..."
+    info "Updating existing source..."
     cd "$MEGASLOTH_DIR"
-    git pull origin main 2>/dev/null || {
-      warn "Update failed, performing fresh install..."
-      cd "$HOME"
-      rm -rf "$MEGASLOTH_DIR"
-      git clone --depth 1 "$MEGASLOTH_REPO" "$MEGASLOTH_DIR"
-      cd "$MEGASLOTH_DIR"
-    }
+    git pull origin main 2>/dev/null || true
   else
-    if [ -d "$MEGASLOTH_DIR" ]; then
-      rm -rf "$MEGASLOTH_DIR"
-    fi
-    info "Downloading MegaSloth..."
-    git clone --depth 1 "$MEGASLOTH_REPO" "$MEGASLOTH_DIR"
+    info "Cloning repository..."
+    rm -rf "$MEGASLOTH_DIR" 2>/dev/null || true
+    git clone --depth 1 "https://github.com/$REPO.git" "$MEGASLOTH_DIR"
     cd "$MEGASLOTH_DIR"
   fi
-
-  success "Source: $MEGASLOTH_DIR"
 
   info "Installing packages..."
   pnpm install --frozen-lockfile 2>/dev/null || pnpm install
-  success "Packages installed"
 
-  info "Building core..."
-  pnpm build 2>/dev/null || warn "TypeScript build skipped (dev mode available)"
+  info "Building..."
+  pnpm build 2>/dev/null || true
 
   mkdir -p .megasloth/data .megasloth/skills
 
-  # Generate .env
-  local anthropic_key="" openai_key="" gemini_key=""
-  case "$LLM_PROVIDER" in
-    claude)  anthropic_key="${api_key:-}" ;;
-    openai)  openai_key="${api_key:-}" ;;
-    gemini)  gemini_key="${api_key:-}" ;;
-  esac
-
-  local webhook_secret
-  webhook_secret=$(openssl rand -hex 20 2>/dev/null || head -c 20 /dev/urandom | od -A n -t x1 | tr -d ' \n')
-
-  local github_token=""
-  if check_command gh && gh auth status &>/dev/null 2>&1; then
-    github_token=$(gh auth token 2>/dev/null || true)
-  fi
-
-  cat > "$MEGASLOTH_DIR/.env" <<ENVEOF
-# MegaSloth Configuration (auto-generated)
-LLM_PROVIDER=${LLM_PROVIDER}
-ANTHROPIC_API_KEY=${anthropic_key}
-OPENAI_API_KEY=${openai_key}
-GEMINI_API_KEY=${gemini_key}
-GITHUB_TOKEN=${github_token}
-GITHUB_WEBHOOK_SECRET=${webhook_secret}
-SECURITY_PROFILE=full
+  if [ ! -f ".env" ]; then
+    local webhook_secret
+    webhook_secret=$(openssl rand -hex 20 2>/dev/null || echo "changeme")
+    cat > .env <<ENVEOF
+LLM_PROVIDER=claude
+ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
+GEMINI_API_KEY=
 HTTP_PORT=13000
 WEBHOOK_PORT=3001
 WEBSOCKET_PORT=18789
 REDIS_URL=redis://localhost:6379
 DATABASE_URL=${MEGASLOTH_DIR}/.megasloth/data/megasloth.db
+GITHUB_WEBHOOK_SECRET=${webhook_secret}
 LOG_LEVEL=info
 ENVEOF
+  fi
 
-  success "Configuration generated"
-
-  # Build Electron desktop app
   info "Building desktop app..."
-  if [ -d "desktop" ]; then
-    cd desktop
-    pnpm install 2>/dev/null || npm install
+  cd desktop
+  pnpm install 2>/dev/null || npm install
 
-    local BUILD_OK=false
-    if [ "$OS" = "macos" ]; then
+  case "$OS" in
+    macos)
       if pnpm build:mac 2>/dev/null; then
-        BUILD_OK=true
-        success "Desktop app built (macOS)"
-
-        local APP_SRC
-        APP_SRC=$(find release -name "MegaSloth.app" -type d 2>/dev/null | head -1)
-        if [ -n "$APP_SRC" ]; then
+        local app_src
+        app_src=$(find release -name "MegaSloth.app" -type d 2>/dev/null | head -1)
+        if [ -n "$app_src" ]; then
           rm -rf /Applications/MegaSloth.app 2>/dev/null || true
-          cp -R "$APP_SRC" /Applications/
+          cp -R "$app_src" /Applications/
           xattr -cr /Applications/MegaSloth.app 2>/dev/null || true
           success "Installed to /Applications/MegaSloth.app"
         fi
       else
-        warn "Desktop build failed — use CLI mode"
+        warn "Desktop build failed"
       fi
-    elif [ "$OS" = "linux" ]; then
-      pnpm build:linux 2>/dev/null && BUILD_OK=true && success "Desktop app built (Linux)" || warn "Desktop build failed — use CLI mode"
-    elif [ "$OS" = "windows" ]; then
-      pnpm build:win 2>/dev/null && BUILD_OK=true && success "Desktop app built (Windows)" || warn "Desktop build failed — use CLI mode"
-    fi
-    cd "$MEGASLOTH_DIR"
-  fi
+      ;;
+    linux)
+      pnpm build:linux 2>/dev/null && success "Desktop app built (Linux)" || warn "Desktop build failed"
+      ;;
+  esac
+}
 
-  # ═══════════════════════════════════════════════════
-  # STEP 5: Create command + launch
-  # ═══════════════════════════════════════════════════
-  step 5 "Finalizing"
+# ─────────────────────────────────────────────────────
+# Main
+# ─────────────────────────────────────────────────────
+main() {
+  print_banner
+  detect_platform
 
-  local INSTALL_BIN
-  if [ -w "/usr/local/bin" ]; then
-    INSTALL_BIN="/usr/local/bin/megasloth"
-  elif [ -d "$HOME/.local/bin" ]; then
-    INSTALL_BIN="$HOME/.local/bin/megasloth"
-  else
-    mkdir -p "$HOME/.local/bin"
-    INSTALL_BIN="$HOME/.local/bin/megasloth"
-  fi
+  info "Platform: ${BOLD}$OS${NC} ($ARCH)"
+  echo ""
 
-  cat > "$INSTALL_BIN" <<'WRAPPER'
-#!/usr/bin/env bash
-MEGASLOTH_DIR="INSTALL_DIR_PLACEHOLDER"
-cd "$MEGASLOTH_DIR" || exit 1
+  local VERSION
+  VERSION=$(get_latest_version)
 
-case "${1:-}" in
-  start)
-    echo "  🦥 Starting MegaSloth..."
-    if [ -f "dist/index.js" ]; then node dist/index.js
-    else npx tsx src/index.ts; fi ;;
-  start:bg)
-    echo "  🦥 Starting MegaSloth in background..."
-    if [ -f "dist/index.js" ]; then nohup node dist/index.js > .megasloth/data/megasloth.log 2>&1 &
-    else nohup npx tsx src/index.ts > .megasloth/data/megasloth.log 2>&1 & fi
-    echo $! > .megasloth/data/megasloth.pid
-    echo "  ✓ Running (PID: $!)" ;;
-  stop)
-    [ -f ".megasloth/data/megasloth.pid" ] && kill "$(cat .megasloth/data/megasloth.pid)" 2>/dev/null && rm -f .megasloth/data/megasloth.pid && echo "  ✓ Stopped" || echo "  Not running" ;;
-  app)
-    if [ "$(uname -s)" = "Darwin" ] && [ -d "/Applications/MegaSloth.app" ]; then
-      open /Applications/MegaSloth.app
-    elif [ -d "desktop/release" ]; then
-      case "$(uname -s)" in
-        Darwin)
-          APP_PATH=$(find desktop/release -name "MegaSloth*.app" -type d 2>/dev/null | head -1)
-          [ -n "$APP_PATH" ] && open "$APP_PATH" || echo "  Desktop app not found" ;;
-        MINGW*|MSYS*|CYGWIN*)
-          APP_PATH=$(find desktop/release -name "MegaSloth*.exe" -type f 2>/dev/null | head -1)
-          [ -n "$APP_PATH" ] && start "" "$APP_PATH" || echo "  Desktop app not found" ;;
-        *)
-          APP_PATH=$(find desktop/release -name "MegaSloth*.AppImage" -type f 2>/dev/null | head -1)
-          [ -n "$APP_PATH" ] && "$APP_PATH" & || echo "  Desktop app not found" ;;
-      esac
-    else
-      echo "  Desktop app not built. Run: megasloth start"
-    fi ;;
-  status)
-    echo "  🦥 MegaSloth Status"
-    echo "  Install: $MEGASLOTH_DIR"
-    [ -f ".megasloth/data/megasloth.pid" ] && kill -0 "$(cat .megasloth/data/megasloth.pid)" 2>/dev/null && echo "  Agent: ✓ Running" || echo "  Agent: ✗ Stopped"
-    redis-cli ping &>/dev/null && echo "  Redis: ✓ Connected" || echo "  Redis: ✗ Not reachable"
-    curl -sf http://localhost:13000/health &>/dev/null && echo "  API:   ✓ Healthy" || echo "  API:   ✗ Not reachable" ;;
-  logs)   tail -f .megasloth/data/megasloth.log 2>/dev/null || echo "  No logs yet. Start first: megasloth start" ;;
-  config) "${EDITOR:-nano}" .env ;;
-  update) git pull origin main && pnpm install && pnpm build 2>/dev/null; echo "  ✓ Updated" ;;
-  uninstall)
-    echo -n "  Remove MegaSloth? [y/N]: "; read -r yn
-    case "$yn" in [yY]*) rm -rf "$MEGASLOTH_DIR" "SELF_PATH_PLACEHOLDER"; rm -rf /Applications/MegaSloth.app 2>/dev/null; echo "  ✓ Uninstalled" ;; *) echo "  Cancelled" ;; esac ;;
-  help|--help|-h|"")
+  if [ -n "$VERSION" ]; then
+    info "Latest release: ${BOLD}$VERSION${NC}"
     echo ""
-    echo "  #########+. *.   +*##############"
-    echo "  ########+..-:======+*:-##########"
-    echo "  #######*.========+###+=+.*#######"
-    echo "  ###**+..#+-=#*..=#===-*+:===*-.##"
-    echo "  ##**=+***=-=#.==+-  -==#=====+**"
-    echo "  #*******::.-===*+=.:==+*========="
-    echo "  #=++++*******=-.-- =============="
-    echo "  ###*+ -++++***** **** -=====:===="
-    echo "  #######* :=+++***** .===== .-----"
-    echo "  ##########*+ -++++**  :=+++++****"
-    echo ""
-    echo "  MegaSloth — Rules Every Repos"
-    echo ""
-    echo "  megasloth start      Start agent (foreground)"
-    echo "  megasloth start:bg   Start agent (background)"
-    echo "  megasloth app        Launch desktop app"
-    echo "  megasloth stop       Stop agent"
-    echo "  megasloth status     Show status"
-    echo "  megasloth logs       View logs"
-    echo "  megasloth config     Edit settings"
-    echo "  megasloth update     Update to latest"
-    echo "  megasloth uninstall  Remove MegaSloth"
-    echo "" ;;
-  *) echo "  Unknown: $1 — run 'megasloth help'" ;;
-esac
-WRAPPER
 
-  # Replace placeholders
-  if sed --version 2>/dev/null | grep -q GNU; then
-    sed -i "s|INSTALL_DIR_PLACEHOLDER|$MEGASLOTH_DIR|g" "$INSTALL_BIN"
-    sed -i "s|SELF_PATH_PLACEHOLDER|$INSTALL_BIN|g" "$INSTALL_BIN"
-  else
-    sed -i '' "s|INSTALL_DIR_PLACEHOLDER|$MEGASLOTH_DIR|g" "$INSTALL_BIN"
-    sed -i '' "s|SELF_PATH_PLACEHOLDER|$INSTALL_BIN|g" "$INSTALL_BIN"
-  fi
-  chmod +x "$INSTALL_BIN"
-  success "Command: $INSTALL_BIN"
-
-  # Add to PATH if needed
-  if ! echo "$PATH" | grep -q "$(dirname "$INSTALL_BIN")"; then
-    local SHELL_RC=""
-    case "${SHELL:-}" in
-      */zsh)  SHELL_RC="$HOME/.zshrc" ;;
-      */bash) SHELL_RC="$HOME/.bashrc" ;;
+    case "$OS" in
+      macos)   install_macos ;;
+      linux)   install_linux ;;
+      windows) install_windows ;;
     esac
-    if [ -n "$SHELL_RC" ]; then
-      echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> "$SHELL_RC"
-      info "Added to $SHELL_RC — restart terminal or: source $SHELL_RC"
-    fi
-  fi
-
-  # ═══════════════════════════════════════════════════
-  # Done!
-  # ═══════════════════════════════════════════════════
-  echo ""
-  echo -e "  ${GREEN}${BOLD}══════════════════════════════════════════════════════${NC}"
-  echo -e "  ${GREEN}${BOLD}  🦥  MegaSloth installed successfully!${NC}"
-  echo -e "  ${GREEN}${BOLD}══════════════════════════════════════════════════════${NC}"
-  echo ""
-  echo -e "  ${WHITE}Get started:${NC}"
-  echo ""
-
-  if [ "$OS" = "macos" ] && [ -d "/Applications/MegaSloth.app" ]; then
-    echo -e "    ${CYAN}open -a MegaSloth${NC}   Launch desktop app"
-    echo -e "    ${CYAN}megasloth app${NC}       Launch desktop app (CLI)"
   else
-    echo -e "    ${CYAN}megasloth app${NC}       Launch desktop app"
+    build_from_source
   fi
-  echo -e "    ${CYAN}megasloth start${NC}     Start agent (CLI mode)"
-  echo -e "    ${CYAN}megasloth help${NC}      Show all commands"
+
+  # ─── Done ────────────────────────────────────────
   echo ""
-  echo -e "  ${DIM}For CLI-only installation: npm install -g megasloth${NC}"
-  echo -e "  ${WHITE}Docs:${NC} ${BLUE}https://github.com/stronghuni/MegaSloth${NC}"
+  echo -e "  ${GREEN}${BOLD}══════════════════════════════════════════════${NC}"
+  echo -e "  ${GREEN}${BOLD}  🦥 MegaSloth installed!${NC}"
+  echo -e "  ${GREEN}${BOLD}══════════════════════════════════════════════${NC}"
+  echo ""
+
+  case "$OS" in
+    macos)
+      echo -e "  ${WHITE}Launch:${NC}"
+      echo -e "    ${CYAN}open -a MegaSloth${NC}"
+      echo ""
+      echo -e "  ${DIM}Configure your API key in the app's Settings.${NC}"
+      ;;
+    linux)
+      echo -e "  ${WHITE}Launch:${NC}"
+      echo -e "    ${CYAN}~/.local/bin/MegaSloth.AppImage${NC}"
+      echo ""
+      echo -e "  ${DIM}Configure your API key in the app's Settings.${NC}"
+      ;;
+    windows)
+      echo -e "  ${DIM}Run the installer, then open MegaSloth from Start Menu.${NC}"
+      echo -e "  ${DIM}Configure your API key in the app's Settings.${NC}"
+      ;;
+  esac
+
+  echo ""
+  echo -e "  ${WHITE}Docs:${NC} ${BLUE}https://github.com/$REPO${NC}"
   echo ""
 }
 

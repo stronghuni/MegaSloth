@@ -27,14 +27,15 @@
         "zip"
       ],
       "icon": "public/icon.icns",
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "artifactName": "MegaSloth-${arch}.${ext}"
     },
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        "nsis"
       ],
-      "icon": "public/icon.png"
+      "icon": "public/icon.png",
+      "artifactName": "MegaSloth-Setup.${ext}"
     },
     "linux": {
       "target": [
@@ -42,7 +43,8 @@
         "deb"
       ],
       "icon": "public/icon.png",
-      "category": "Development"
+      "category": "Development",
+      "artifactName": "MegaSloth.${ext}"
     }
   },
   "dependencies": {

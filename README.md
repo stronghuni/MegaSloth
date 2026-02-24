@@ -37,27 +37,28 @@
 
 ## 🚀 Quick Start
 
-### Desktop App — For Everyone
+### Desktop App — Download & Install
 
-> GUI app. No coding required. Just need one LLM API key.
+> No terminal. No coding. Just download, install, and configure your API key in the app.
 
-| Platform | Install Command |
-|----------|-----------------|
-| **macOS / Linux** | `curl -fsSL https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.sh \| bash` |
-| **Windows** | `irm https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.ps1 \| iex` |
+| Platform | Download |
+|----------|----------|
+| **macOS (Apple Silicon)** | [MegaSloth-arm64.dmg](https://github.com/stronghuni/MegaSloth/releases/latest/download/MegaSloth-arm64.dmg) |
+| **macOS (Intel)** | [MegaSloth-x64.dmg](https://github.com/stronghuni/MegaSloth/releases/latest/download/MegaSloth-x64.dmg) |
+| **Windows** | [MegaSloth-Setup.exe](https://github.com/stronghuni/MegaSloth/releases/latest/download/MegaSloth-Setup.exe) |
+| **Linux** | [MegaSloth.AppImage](https://github.com/stronghuni/MegaSloth/releases/latest/download/MegaSloth.AppImage) |
 
-Works on **macOS, Windows & Linux**. The installer handles everything:
-
-1. **Accept the terms** — grant the agent full system access
-2. **Enter one LLM API key** — Claude, OpenAI, or Gemini
-
-That's it. Node.js, Redis, GitHub CLI are **auto-installed**. The Electron desktop app is **auto-built**.
+Or install via terminal:
 
 ```bash
-megasloth app       # Launch desktop app
-megasloth start     # Start agent (CLI mode)
-megasloth help      # Show all commands
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.sh | bash
+
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.ps1 | iex
 ```
+
+**That's it.** Open the app → go to **Settings** → enter your API key. Done.
 
 ---
 
@@ -173,41 +174,26 @@ Extend MegaSloth with custom plugins:
 
 ### Desktop App (Non-Developers)
 
-**Step 1:** Open Terminal (or PowerShell on Windows)
+**Step 1:** Download the installer from [GitHub Releases](https://github.com/stronghuni/MegaSloth/releases/latest)
 
-| Platform | How to Open |
-|----------|-------------|
-| **macOS** | `Cmd + Space` → "Terminal" → Enter |
-| **Linux** | `Ctrl + Alt + T` |
-| **Windows** | `Win + X` → "PowerShell" or "Terminal" |
+| Platform | File |
+|----------|------|
+| **macOS (Apple Silicon)** | `MegaSloth-arm64.dmg` |
+| **macOS (Intel)** | `MegaSloth-x64.dmg` |
+| **Windows** | `MegaSloth-Setup.exe` |
+| **Linux** | `MegaSloth.AppImage` |
 
-**Step 2:** Run the installer
+**Step 2:** Install
 
-```bash
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.sh | bash
-```
+| Platform | How to Install |
+|----------|----------------|
+| **macOS** | Open the `.dmg`, drag MegaSloth to Applications |
+| **Windows** | Run the `.exe` installer |
+| **Linux** | `chmod +x MegaSloth.AppImage && ./MegaSloth.AppImage` |
 
-```powershell
-# Windows (PowerShell)
-irm https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.ps1 | iex
-```
+**Step 3:** Open the app → **Settings** → enter your API key
 
-**Step 3:** Follow the prompts
-
-| Prompt | What to Do |
-|--------|------------|
-| Terms of Service | Type `y` and press Enter |
-| AI Provider | Choose 1 (Claude), 2 (OpenAI), or 3 (Gemini) |
-| API Key | Paste your key and press Enter |
-
-**Step 4:** Launch the app
-
-```bash
-megasloth app     # Desktop app (Electron GUI)
-```
-
-> **That's it.** The agent auto-provisions GitHub/GitLab/AWS credentials, sets up webhooks, and starts monitoring.
+> **That's it.** No terminal required. The app handles everything.
 
 ---
 
