@@ -1,4 +1,4 @@
-import { type LLMProvider, type Message, type ContentBlock, type ToolDefinition, type LLMProviderConfig } from '../providers/types.js';
+import { type LLMProvider, type Message, type LLMProviderConfig } from '../providers/types.js';
 import { createLLMProvider } from '../providers/factory.js';
 import { ToolRegistry, type ToolContext, createDefaultToolRegistry } from '../tools/registry.js';
 import { ContextManager, type ConversationOptions } from './context-manager.js';

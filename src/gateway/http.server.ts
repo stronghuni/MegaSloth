@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyReply } from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import { type ServerConfig } from '../config/schema.js';
 import { type MetadataStore } from '../storage/metadata.store.js';

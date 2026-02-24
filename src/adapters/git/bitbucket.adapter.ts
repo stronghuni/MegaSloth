@@ -614,12 +614,12 @@ export class BitbucketAdapter implements GitProviderAdapter {
     }));
   }
 
-  async getJobLogs(owner: string, repo: string, jobId: string): Promise<string> {
+  async getJobLogs(_owner: string, _repo: string, _jobId: string): Promise<string> {
     this.logger.warn('getJobLogs requires pipeline UUID in addition to step UUID');
     return 'Log retrieval requires additional context';
   }
 
-  async retryWorkflow(owner: string, repo: string, runId: string): Promise<void> {
+  async retryWorkflow(_owner: string, _repo: string, _runId: string): Promise<void> {
     this.logger.warn('Bitbucket does not support re-running pipelines');
   }
 

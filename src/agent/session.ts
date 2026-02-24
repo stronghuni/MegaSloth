@@ -7,9 +7,7 @@ import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
 import {
   type ClaudeClient,
-  type Message,
   type ToolUse,
-  type ToolDefinition,
 } from './claude-client.js';
 import { SessionState, type SessionConfiguration } from './state/session.js';
 import { ActiveTurn } from './state/turn.js';

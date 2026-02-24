@@ -39,7 +39,7 @@ export class WebSocketServer {
   private async setup(): Promise<void> {
     await this.server.register(websocket);
 
-    this.server.get('/ws', { websocket: true }, (socket, request) => {
+    this.server.get('/ws', { websocket: true }, (socket, _request) => {
       this.handleConnection(socket);
     });
 

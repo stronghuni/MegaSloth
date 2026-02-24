@@ -680,7 +680,7 @@ export class GitLabAdapter implements GitProviderAdapter {
     }));
   }
 
-  async createDeployment(owner: string, repo: string, ref: string, environment: string, description?: string): Promise<import('./types.js').GitDeployment> {
+  async createDeployment(owner: string, repo: string, ref: string, environment: string, _description?: string): Promise<import('./types.js').GitDeployment> {
     const env = await this.api.Environments.create(this.getProjectPath(owner, repo), { name: environment } as any).catch(() => null);
     return { id: String(env ? (env as any).id : Date.now()), environment, status: 'pending', sha: ref, createdAt: new Date() };
   }

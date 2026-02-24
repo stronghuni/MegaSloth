@@ -6,7 +6,7 @@ import { MetadataStore, CacheStore } from './storage/index.js';
 import { HttpServer, WebhookServer, WebSocketServer, type WebhookEvent } from './gateway/index.js';
 import { createAgentCore, type AgentCore } from './agent/index.js';
 import { SkillEngine } from './skills/index.js';
-import { JobQueue, type JobData, type JobResult } from './queue/index.js';
+import { JobQueue } from './queue/index.js';
 import { createJobProcessor } from './queue/worker.js';
 import { Scheduler } from './scheduler/index.js';
 import { SlackAdapter } from './adapters/notifications/index.js';

@@ -6,7 +6,7 @@
 import { type GraphStore } from '../graph/store.js';
 import { type EntityNode, type EpisodeNode } from '../graph/nodes.js';
 import { type EntityEdge } from '../graph/edges.js';
-import { type EntityExtractor, type ExtractionResult } from '../extraction/entity.js';
+import { type EntityExtractor } from '../extraction/entity.js';
 import { getLogger } from '../../utils/logger.js';
 
 const logger = getLogger('hybrid-retrieval');

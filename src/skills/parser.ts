@@ -1,5 +1,5 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { getLogger } from '../utils/logger.js';
 

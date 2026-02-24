@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, mkdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { dirname } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { config as loadDotenv } from 'dotenv';
 import { configSchema, type Config } from './schema.js';

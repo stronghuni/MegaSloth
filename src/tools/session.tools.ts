@@ -2,7 +2,6 @@ import { type ToolRegistry } from './registry.js';
 import {
   shellBackground,
   processList,
-  processKill,
   processWrite,
 } from './shell/process-manager.js';
 

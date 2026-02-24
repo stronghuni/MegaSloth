@@ -1,5 +1,5 @@
 import { type Message, type ContentBlock } from './claude-client.js';
-import { type MetadataStore, type ConversationContext } from '../storage/index.js';
+import { type MetadataStore } from '../storage/index.js';
 import { getLogger } from '../utils/logger.js';
 
 export interface ConversationOptions {

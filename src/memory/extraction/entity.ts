@@ -4,7 +4,7 @@
  */
 
 import { type LLMProvider } from '../../providers/types.js';
-import { type EntityNode, type EntityType } from '../graph/nodes.js';
+import { type EntityType } from '../graph/nodes.js';
 import { type RelationType } from '../graph/edges.js';
 import { getLogger } from '../../utils/logger.js';
 

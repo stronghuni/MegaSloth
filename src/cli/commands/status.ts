@@ -20,7 +20,7 @@ export const statusCommand = new Command('status')
       try {
         process.kill(parseInt(pid, 10), 0);
         isRunning = true;
-        statusLine('Agent', true, `running (PID: ${pid})`);
+        statusLine('Agent', isRunning, `running (PID: ${pid})`);
       } catch {
         statusLine('Agent', false, 'stopped (stale PID)');
       }

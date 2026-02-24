@@ -7,18 +7,14 @@ import { type Database } from 'better-sqlite3';
 import {
   type EpisodeNode,
   type EntityNode,
-  type CommunityNode,
   createEpisodeNode,
   createEntityNode,
-  entitiesMightMatch,
 } from './nodes.js';
 import {
   type EpisodicEdge,
   type EntityEdge,
-  type CommunityEdge,
   createEpisodicEdge,
   createEntityEdge,
-  isFactValid,
   factsContradict,
   resolveContradiction,
   type RelationType,

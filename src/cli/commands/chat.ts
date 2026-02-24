@@ -80,7 +80,7 @@ export const chatCommand = new Command('chat')
       if (input === '/tools') {
         try {
           const res = await fetch(`http://localhost:${port}/api/config`);
-          const data = await res.json() as any;
+          await res.json();
           blank();
           console.log(`  ${c.white}${c.bold}Available tool categories${c.reset}`);
           const categories = ['git', 'pr', 'ci', 'issue', 'code', 'release', 'deploy', 'env',
