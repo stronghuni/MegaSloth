@@ -37,27 +37,23 @@
 curl -fsSL https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.sh | bash
 ```
 
-That's it. The installer will:
-- Check and install **Node.js** (if needed)
-- Check and install **Redis** (if needed)
-- Download MegaSloth
-- Build the project
-- Walk you through an **interactive setup wizard**
-- Create the global `megasloth` command
+You only need to do **two things**:
 
-> **No coding experience required.** The installer handles everything automatically.
+1. **Accept the terms** — grant the agent full system access
+2. **Enter one LLM API key** — Claude, OpenAI, or Gemini
 
-After installation, manage MegaSloth with simple commands:
+Everything else is automatic:
+- Node.js, Redis, GitHub CLI — **auto-installed**
+- GitHub/GitLab/AWS tokens — **auto-provisioned by the agent**
+- Electron desktop app — **auto-built**
+
+> **No coding experience required.** The agent handles everything from here.
 
 ```bash
-megasloth start        # Start the agent
-megasloth start:bg     # Start as background daemon
-megasloth stop         # Stop the agent
-megasloth status       # Check if running
-megasloth logs         # View live logs
-megasloth config       # Edit configuration
-megasloth update       # Update to latest version
-megasloth uninstall    # Remove MegaSloth
+megasloth start     # Start the agent
+megasloth app       # Launch desktop app
+megasloth status    # Check if running
+megasloth help      # Show all commands
 ```
 
 ---
@@ -156,40 +152,42 @@ Extend MegaSloth with custom plugins:
 
 ## 📖 Quick Start Guide
 
-### For Non-Developers (Easiest)
+### 3 Steps to Full Automation
 
-**Step 1:** Open your Terminal app
+**Step 1:** Open Terminal and run the installer
 
-- **Mac:** Press `Cmd + Space`, type "Terminal", press Enter
-- **Linux:** Press `Ctrl + Alt + T`
-- **Windows:** Install [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) first, then open Ubuntu
-
-**Step 2:** Run the installer
+- **Mac:** `Cmd + Space` → "Terminal" → Enter
+- **Linux:** `Ctrl + Alt + T`
+- **Windows:** [Install WSL](https://learn.microsoft.com/en-us/windows/wsl/install) first
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.sh | bash
 ```
 
-**Step 3:** Follow the setup wizard prompts
+**Step 2:** Accept the terms and enter your LLM API key
 
-The wizard will ask you for:
+| Prompt | What to Do |
+|--------|------------|
+| Terms of Service | Type `y` and press Enter |
+| AI Provider | Choose 1 (Claude), 2 (OpenAI), or 3 (Gemini) |
+| API Key | Paste your key and press Enter |
 
-| Question | What to Enter | Where to Get It |
-|----------|---------------|-----------------|
-| AI Provider | Choose 1, 2, or 3 | Your preference |
-| API Key | Your AI provider's key | See [Getting API Keys](#getting-api-keys) below |
-| Security Profile | Standard (recommended) | Choose based on your needs |
-| GitHub Token | Auto-detected or enter manually | Auto via `gh` CLI or [Getting API Keys](#getting-api-keys) |
+> That's it. **Nothing else to configure.** The agent takes over from here.
 
-> **Only the LLM API key is required.** GitHub tokens and other credentials are auto-provisioned on demand.
-
-**Step 4:** Start MegaSloth
+**Step 3:** Launch MegaSloth
 
 ```bash
-megasloth start
+megasloth start       # CLI mode
+megasloth app         # Desktop app (Electron)
 ```
 
-**Step 5:** Set up webhooks in your GitHub repository
+The agent will automatically:
+- Detect and install GitHub CLI, then authenticate via OAuth
+- Provision all required API tokens and credentials
+- Set up webhooks, CI/CD pipelines, and monitoring
+- Start executing tasks based on repository events
+
+**Step 4 (optional):** Set up webhooks in your GitHub repository
 
 Go to your repository → **Settings** → **Webhooks** → **Add webhook**:
 - **Payload URL:** `https://your-server-ip:3001/webhook/github`

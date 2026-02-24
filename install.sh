@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 #   MegaSloth Installer
-#   AI-Powered Repository Operations Agent
+#   Full Automation Agent — One API Key, Total Control
 #
 #   Usage:
 #     curl -fsSL https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.sh | bash
@@ -13,7 +13,6 @@ set -euo pipefail
 # ─────────────────────────────────────────────────────
 MEGASLOTH_REPO="https://github.com/stronghuni/MegaSloth.git"
 MEGASLOTH_DIR="${MEGASLOTH_HOME:-$HOME/.megasloth-app}"
-MEGASLOTH_BIN="/usr/local/bin/megasloth"
 REQUIRED_NODE_MAJOR=22
 MIN_NODE_MAJOR=20
 
@@ -38,11 +37,11 @@ print_banner() {
   echo "  ║                                                      ║"
   echo "  ║          🦥  M E G A S L O T H                      ║"
   echo "  ║                                                      ║"
-  echo "  ║    AI-Powered Repository Operations Agent            ║"
+  echo "  ║    Full Automation Agent                              ║"
+  echo "  ║    One API Key, Total Control                         ║"
   echo "  ║                                                      ║"
   echo "  ╚══════════════════════════════════════════════════════╝"
   echo -e "${NC}"
-  echo ""
 }
 
 info()    { echo -e "  ${BLUE}▸${NC} $1"; }
@@ -52,7 +51,7 @@ error()   { echo -e "  ${RED}✗${NC} $1"; }
 step()    { echo -e "\n  ${MAGENTA}${BOLD}[$1/$TOTAL_STEPS]${NC} ${WHITE}$2${NC}\n"; }
 ask()     { echo -ne "  ${CYAN}?${NC} $1"; }
 
-TOTAL_STEPS=8
+TOTAL_STEPS=5
 
 # ─────────────────────────────────────────────────────
 # OS Detection
@@ -71,19 +70,14 @@ detect_os() {
     error "Unsupported operating system: $(uname -s)"
     echo ""
     echo "  MegaSloth supports: macOS, Linux, and Windows (WSL)"
-    echo "  For Windows, install WSL first:"
-    echo "    https://learn.microsoft.com/en-us/windows/wsl/install"
-    echo ""
     exit 1
   fi
 }
 
 # ─────────────────────────────────────────────────────
-# Dependency Checks
+# Silent Dependency Installers (no user interaction)
 # ─────────────────────────────────────────────────────
-check_command() {
-  command -v "$1" &>/dev/null
-}
+check_command() { command -v "$1" &>/dev/null; }
 
 get_node_version() {
   if check_command node; then
@@ -93,95 +87,55 @@ get_node_version() {
   fi
 }
 
-install_node() {
-  info "Node.js >= $REQUIRED_NODE_MAJOR is required"
-
+auto_install_node() {
   if [ "$OS" = "macos" ]; then
-    if check_command brew; then
-      info "Installing Node.js via Homebrew..."
-      brew install node@$REQUIRED_NODE_MAJOR
-      brew link --overwrite node@$REQUIRED_NODE_MAJOR 2>/dev/null || true
-    else
-      info "Installing Homebrew first..."
-      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-      # Add Homebrew to PATH for Apple Silicon
-      if [ -f "/opt/homebrew/bin/brew" ]; then
-        eval "$(/opt/homebrew/bin/brew shellenv)"
-      fi
-      brew install node@$REQUIRED_NODE_MAJOR
-      brew link --overwrite node@$REQUIRED_NODE_MAJOR 2>/dev/null || true
+    if ! check_command brew; then
+      info "Installing Homebrew..."
+      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/null
+      [ -f "/opt/homebrew/bin/brew" ] && eval "$(/opt/homebrew/bin/brew shellenv)"
     fi
+    brew install node@$REQUIRED_NODE_MAJOR 2>/dev/null
+    brew link --overwrite node@$REQUIRED_NODE_MAJOR 2>/dev/null || true
   elif [ "$OS" = "linux" ]; then
     if check_command apt-get; then
-      info "Installing Node.js via NodeSource (apt)..."
       curl -fsSL https://deb.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x | sudo -E bash -
       sudo apt-get install -y nodejs
     elif check_command dnf; then
-      info "Installing Node.js via NodeSource (dnf)..."
       curl -fsSL https://rpm.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x | sudo bash -
       sudo dnf install -y nodejs
     elif check_command yum; then
-      info "Installing Node.js via NodeSource (yum)..."
       curl -fsSL https://rpm.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x | sudo bash -
       sudo yum install -y nodejs
     elif check_command pacman; then
-      info "Installing Node.js via pacman..."
       sudo pacman -Sy --noconfirm nodejs npm
-    else
-      error "Could not detect package manager."
-      echo "  Please install Node.js >= $REQUIRED_NODE_MAJOR manually:"
-      echo "    https://nodejs.org/en/download"
-      exit 1
     fi
   fi
 }
 
-install_redis() {
+auto_install_redis() {
   if [ "$OS" = "macos" ]; then
-    if check_command brew; then
-      info "Installing Redis via Homebrew..."
-      brew install redis
-      brew services start redis 2>/dev/null || true
-    fi
+    check_command brew && brew install redis 2>/dev/null && brew services start redis 2>/dev/null || true
   elif [ "$OS" = "linux" ]; then
     if check_command apt-get; then
-      info "Installing Redis via apt..."
-      sudo apt-get install -y redis-server
+      sudo apt-get install -y redis-server 2>/dev/null
       sudo systemctl enable redis-server 2>/dev/null || sudo service redis-server start 2>/dev/null || true
     elif check_command dnf; then
-      sudo dnf install -y redis
-      sudo systemctl enable --now redis 2>/dev/null || true
-    elif check_command yum; then
-      sudo yum install -y redis
-      sudo systemctl enable --now redis 2>/dev/null || true
+      sudo dnf install -y redis 2>/dev/null && sudo systemctl enable --now redis 2>/dev/null || true
     elif check_command pacman; then
-      sudo pacman -Sy --noconfirm redis
-      sudo systemctl enable --now redis 2>/dev/null || true
+      sudo pacman -Sy --noconfirm redis 2>/dev/null && sudo systemctl enable --now redis 2>/dev/null || true
     fi
   fi
 }
 
-install_pnpm() {
+auto_install_pnpm() {
   if ! check_command pnpm; then
-    info "Installing pnpm..."
     npm install -g pnpm@latest 2>/dev/null || sudo npm install -g pnpm@latest
-    success "pnpm installed"
   fi
 }
 
-install_gh() {
-  if check_command gh; then
-    return 0
-  fi
-
-  info "Installing GitHub CLI (gh)..."
+auto_install_gh() {
   if [ "$OS" = "macos" ]; then
-    if check_command brew; then
-      brew install gh
-    else
-      warn "Homebrew not available — skipping gh install"
-      return 1
-    fi
+    check_command brew && brew install gh 2>/dev/null || true
   elif [ "$OS" = "linux" ]; then
     if check_command apt-get; then
       (type -p wget >/dev/null || sudo apt-get install -y wget) \
@@ -191,189 +145,11 @@ install_gh() {
         && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
         && sudo apt-get update && sudo apt-get install -y gh
     elif check_command dnf; then
-      sudo dnf install -y 'dnf-command(config-manager)' && sudo dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && sudo dnf install -y gh
-    elif check_command yum; then
-      sudo yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && sudo yum install -y gh
+      sudo dnf install -y 'dnf-command(config-manager)' 2>/dev/null && sudo dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo 2>/dev/null && sudo dnf install -y gh 2>/dev/null || true
     elif check_command pacman; then
-      sudo pacman -Sy --noconfirm github-cli
-    else
-      warn "Could not install gh CLI automatically"
-      return 1
+      sudo pacman -Sy --noconfirm github-cli 2>/dev/null || true
     fi
   fi
-
-  if check_command gh; then
-    success "GitHub CLI (gh) installed"
-    return 0
-  else
-    warn "gh installation failed — GitHub token can still be set manually"
-    return 1
-  fi
-}
-
-# ─────────────────────────────────────────────────────
-# Interactive Setup
-# ─────────────────────────────────────────────────────
-run_setup_wizard() {
-  echo -e "\n  ${WHITE}${BOLD}── Setup Wizard ──${NC}\n"
-  echo -e "  ${DIM}Configure your MegaSloth instance. Press Enter to skip optional fields.${NC}\n"
-
-  # LLM Provider
-  echo -e "  ${WHITE}Which AI provider would you like to use?${NC}"
-  echo -e "  ${DIM}  1) Claude  (Anthropic) — recommended${NC}"
-  echo -e "  ${DIM}  2) OpenAI  (GPT-4o)${NC}"
-  echo -e "  ${DIM}  3) Gemini  (Google)${NC}"
-  echo ""
-  ask "Choose [1/2/3] (default: 1): "
-  read -r llm_choice
-  echo ""
-
-  case "$llm_choice" in
-    2) LLM_PROVIDER="openai" ;;
-    3) LLM_PROVIDER="gemini" ;;
-    *) LLM_PROVIDER="claude" ;;
-  esac
-
-  success "LLM Provider: ${BOLD}$LLM_PROVIDER${NC}"
-
-  # API Key
-  case "$LLM_PROVIDER" in
-    claude)
-      ask "Anthropic API Key (sk-ant-...): "
-      read -rs api_key; echo ""
-      API_KEY_VAR="ANTHROPIC_API_KEY"
-      ;;
-    openai)
-      ask "OpenAI API Key (sk-...): "
-      read -rs api_key; echo ""
-      API_KEY_VAR="OPENAI_API_KEY"
-      ;;
-    gemini)
-      ask "Google Gemini API Key (AIza...): "
-      read -rs api_key; echo ""
-      API_KEY_VAR="GEMINI_API_KEY"
-      ;;
-  esac
-
-  if [ -n "${api_key:-}" ]; then
-    success "API Key: ****${api_key: -4}"
-  else
-    warn "No API key provided — you can set it later in .env"
-  fi
-
-  # Security Profile
-  echo ""
-  echo -e "  ${WHITE}Security Profile:${NC}"
-  echo -e "  ${DIM}  1) Standard — shell, filesystem, web, credentials (recommended)${NC}"
-  echo -e "  ${DIM}  2) Full     — all tools including browser automation & system control${NC}"
-  echo -e "  ${DIM}  3) Restricted — Git operations only, no local access${NC}"
-  echo ""
-  ask "Choose [1/2/3] (default: 1): "
-  read -r sec_choice
-  echo ""
-
-  case "$sec_choice" in
-    2) SECURITY_PROFILE="full" ;;
-    3) SECURITY_PROFILE="restricted" ;;
-    *) SECURITY_PROFILE="standard" ;;
-  esac
-  success "Security: ${BOLD}$SECURITY_PROFILE${NC}"
-
-  # Auto-detect GitHub token
-  github_token=""
-  if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
-    github_token=$(gh auth token 2>/dev/null || true)
-    if [ -n "${github_token:-}" ]; then
-      success "GitHub Token: auto-detected from gh CLI"
-    fi
-  fi
-
-  if [ -z "${github_token:-}" ]; then
-    echo ""
-    echo -e "  ${DIM}GitHub token not found. MegaSloth can auto-provision later via OAuth.${NC}"
-    ask "GitHub Personal Access Token (ghp_..., or Enter to skip): "
-    read -rs github_token; echo ""
-    if [ -n "${github_token:-}" ]; then
-      success "GitHub Token: ****${github_token: -4}"
-    else
-      info "Will auto-provision GitHub token on first use (OAuth Device Flow)"
-    fi
-  fi
-
-  webhook_secret=$(openssl rand -hex 20 2>/dev/null || head -c 40 /dev/urandom | od -A n -t x1 | tr -d ' \n')
-  success "Webhook Secret: auto-generated"
-
-  # Assign API keys based on provider
-  local anthropic_key="" openai_key="" gemini_key=""
-  case "$LLM_PROVIDER" in
-    claude)  anthropic_key="${api_key:-}" ;;
-    openai)  openai_key="${api_key:-}" ;;
-    gemini)  gemini_key="${api_key:-}" ;;
-  esac
-
-  # Write .env
-  cat > "$MEGASLOTH_DIR/.env" <<ENVEOF
-# ═══════════════════════════════════════════════════════
-#  MegaSloth Configuration
-#  Generated by install.sh on $(date +%Y-%m-%d)
-# ═══════════════════════════════════════════════════════
-
-# LLM Provider: claude | openai | gemini
-LLM_PROVIDER=${LLM_PROVIDER}
-
-# API Keys (set the one matching your provider)
-ANTHROPIC_API_KEY=${anthropic_key}
-OPENAI_API_KEY=${openai_key}
-GEMINI_API_KEY=${gemini_key}
-
-# GitHub
-GITHUB_TOKEN=${github_token:-}
-GITHUB_WEBHOOK_SECRET=${webhook_secret}
-
-# Server Ports
-HTTP_PORT=13000
-WEBHOOK_PORT=3001
-WEBSOCKET_PORT=18789
-
-# Redis
-REDIS_URL=redis://localhost:6379
-
-# Database
-DATABASE_URL=${MEGASLOTH_DIR}/.megasloth/data/megasloth.db
-
-# Security Profile: restricted | standard | full
-SECURITY_PROFILE=${SECURITY_PROFILE}
-
-# Logging
-LOG_LEVEL=info
-ENVEOF
-
-  # Fix the env file with proper values
-  if [ "$LLM_PROVIDER" = "claude" ]; then
-    sed -i.bak "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=${api_key:-}|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
-    sed -i '' "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=${api_key:-}|" "$MEGASLOTH_DIR/.env"
-    sed -i.bak "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
-    sed -i '' "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=|" "$MEGASLOTH_DIR/.env"
-    sed -i.bak "s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
-    sed -i '' "s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=|" "$MEGASLOTH_DIR/.env"
-  elif [ "$LLM_PROVIDER" = "openai" ]; then
-    sed -i.bak "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
-    sed -i '' "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=|" "$MEGASLOTH_DIR/.env"
-    sed -i.bak "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=${api_key:-}|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
-    sed -i '' "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=${api_key:-}|" "$MEGASLOTH_DIR/.env"
-    sed -i.bak "s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
-    sed -i '' "s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=|" "$MEGASLOTH_DIR/.env"
-  elif [ "$LLM_PROVIDER" = "gemini" ]; then
-    sed -i.bak "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
-    sed -i '' "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=|" "$MEGASLOTH_DIR/.env"
-    sed -i.bak "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
-    sed -i '' "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=|" "$MEGASLOTH_DIR/.env"
-    sed -i.bak "s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=${api_key:-}|" "$MEGASLOTH_DIR/.env" 2>/dev/null || \
-    sed -i '' "s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=${api_key:-}|" "$MEGASLOTH_DIR/.env"
-  fi
-
-  # Clean up backup files from sed
-  rm -f "$MEGASLOTH_DIR/.env.bak"
 }
 
 # ─────────────────────────────────────────────────────
@@ -383,291 +159,228 @@ main() {
   print_banner
   detect_os
 
-  info "Detected OS: ${BOLD}$OS${NC} (${ARCH})"
+  info "Detected: ${BOLD}$OS${NC} (${ARCH})"
   echo ""
 
-  # ── Step 1: Check Node.js ──
-  step 1 "Checking Node.js"
+  # ═══════════════════════════════════════════════════
+  # STEP 1: Terms of Service
+  # ═══════════════════════════════════════════════════
+  step 1 "Terms of Service"
 
-  NODE_VERSION=$(get_node_version)
-  if [ "$NODE_VERSION" -ge "$MIN_NODE_MAJOR" ] 2>/dev/null; then
-    success "Node.js v$(node -v 2>/dev/null | sed 's/v//') found"
-  else
-    warn "Node.js >= $REQUIRED_NODE_MAJOR not found"
-    ask "Install Node.js $REQUIRED_NODE_MAJOR automatically? [Y/n]: "
-    read -r yn
-    case "$yn" in
-      [nN]*)
-        error "Node.js is required. Install it from https://nodejs.org"
+  echo -e "  ${WHITE}MegaSloth Full Automation Agent${NC}"
+  echo ""
+  echo -e "  By installing MegaSloth, you agree to the following:"
+  echo ""
+  echo -e "  ${DIM}  1. MegaSloth will have full access to your local system"
+  echo -e "     including terminal, filesystem, browser, and clipboard.${NC}"
+  echo ""
+  echo -e "  ${DIM}  2. MegaSloth will automatically provision and manage"
+  echo -e "     API credentials (GitHub, GitLab, AWS, GCP, etc.)${NC}"
+  echo ""
+  echo -e "  ${DIM}  3. MegaSloth will execute shell commands, modify files,"
+  echo -e "     and interact with external services on your behalf.${NC}"
+  echo ""
+  echo -e "  ${DIM}  4. All credentials are encrypted (AES-256-GCM) and"
+  echo -e "     stored locally. Nothing is sent to third parties.${NC}"
+  echo ""
+  echo -e "  ${DIM}  5. You can revoke permissions anytime by changing"
+  echo -e "     the security profile (restricted/standard/full).${NC}"
+  echo ""
+
+  if [ -t 0 ]; then
+    ask "Do you accept these terms? [y/N]: "
+    read -r accept
+    case "$accept" in
+      [yY]|[yY][eE][sS])
+        success "Terms accepted"
+        ;;
+      *)
+        error "You must accept the terms to install MegaSloth."
         exit 1
         ;;
-      *)
-        install_node
-        success "Node.js installed: v$(node -v 2>/dev/null | sed 's/v//')"
-        ;;
     esac
-  fi
-
-  install_pnpm
-
-  # ── Step 2: Check Redis ──
-  step 2 "Checking Redis"
-
-  if check_command redis-server || check_command redis-cli; then
-    success "Redis found"
-    # Try to start if not running
-    redis-cli ping &>/dev/null || {
-      warn "Redis is installed but not running"
-      if [ "$OS" = "macos" ]; then
-        brew services start redis 2>/dev/null && success "Redis started" || warn "Start Redis manually: redis-server"
-      else
-        sudo systemctl start redis-server 2>/dev/null || sudo systemctl start redis 2>/dev/null || warn "Start Redis manually: redis-server"
-      fi
-    }
   else
-    warn "Redis not found"
-    ask "Install Redis automatically? [Y/n]: "
-    read -r yn
-    case "$yn" in
-      [nN]*)
-        warn "Redis is required for the job queue."
-        warn "Install it later: https://redis.io/docs/install/"
-        ;;
-      *)
-        install_redis
-        success "Redis installed and started"
-        ;;
-    esac
+    warn "Non-interactive mode — terms auto-accepted"
   fi
 
-  # ── Step 3: Check GitHub CLI ──
-  step 3 "Checking GitHub CLI (gh)"
+  # ═══════════════════════════════════════════════════
+  # STEP 2: LLM API Key (the ONLY user input needed)
+  # ═══════════════════════════════════════════════════
+  step 2 "AI Provider Setup"
 
-  if check_command gh; then
-    success "GitHub CLI (gh) found: $(gh --version 2>/dev/null | head -1)"
-    if gh auth status &>/dev/null 2>&1; then
-      success "GitHub CLI: already authenticated"
+  echo -e "  ${WHITE}Choose your AI provider:${NC}"
+  echo ""
+  echo -e "    ${CYAN}1)${NC} Claude  ${DIM}(Anthropic) — recommended${NC}"
+  echo -e "    ${CYAN}2)${NC} OpenAI  ${DIM}(GPT-5.2)${NC}"
+  echo -e "    ${CYAN}3)${NC} Gemini  ${DIM}(Google)${NC}"
+  echo ""
+
+  if [ -t 0 ]; then
+    ask "Choose [1/2/3] (default: 1): "
+    read -r llm_choice
+  else
+    llm_choice="1"
+  fi
+
+  case "$llm_choice" in
+    2) LLM_PROVIDER="openai";  KEY_PREFIX="sk-";      KEY_LABEL="OpenAI API Key" ;;
+    3) LLM_PROVIDER="gemini";  KEY_PREFIX="AIza";     KEY_LABEL="Google Gemini API Key" ;;
+    *)  LLM_PROVIDER="claude";  KEY_PREFIX="sk-ant-";  KEY_LABEL="Anthropic API Key" ;;
+  esac
+
+  success "Provider: ${BOLD}$LLM_PROVIDER${NC}"
+  echo ""
+
+  if [ -t 0 ]; then
+    ask "${KEY_LABEL} (${KEY_PREFIX}...): "
+    read -rs api_key
+    echo ""
+
+    if [ -n "${api_key:-}" ]; then
+      success "API Key: ****${api_key: -4}"
     else
-      info "GitHub CLI installed but not logged in"
-      ask "Log in to GitHub now? [Y/n]: "
-      read -r yn
-      case "$yn" in
-        [nN]*) info "You can log in later: gh auth login" ;;
-        *)
-          gh auth login --web 2>/dev/null || gh auth login || warn "Login skipped — run 'gh auth login' later"
-          ;;
-      esac
+      warn "No key entered — set it later in the app Settings"
     fi
   else
-    ask "Install GitHub CLI (gh) for automatic token management? [Y/n]: "
-    read -r yn
-    case "$yn" in
-      [nN]*)
-        info "Skipped — you can set GITHUB_TOKEN manually in .env later"
-        ;;
-      *)
-        if install_gh; then
-          ask "Log in to GitHub now? [Y/n]: "
-          read -r yn2
-          case "$yn2" in
-            [nN]*) info "You can log in later: gh auth login" ;;
-            *)
-              gh auth login --web 2>/dev/null || gh auth login || warn "Login skipped"
-              ;;
-          esac
-        fi
-        ;;
-    esac
+    api_key=""
+    warn "Non-interactive mode — set API key in the app Settings"
   fi
 
-  # ── Step 4: Download MegaSloth ──
-  step 4 "Downloading MegaSloth"
+  echo ""
+  echo -e "  ${GREEN}${BOLD}That's it! MegaSloth will handle everything else.${NC}"
+  echo -e "  ${DIM}  GitHub, GitLab, AWS, Redis — the agent provisions it all.${NC}"
+
+  # ═══════════════════════════════════════════════════
+  # STEP 3: Auto-install all dependencies (silent)
+  # ═══════════════════════════════════════════════════
+  step 3 "Installing dependencies (automatic)"
+
+  # Node.js
+  NODE_VERSION=$(get_node_version)
+  if [ "$NODE_VERSION" -ge "$MIN_NODE_MAJOR" ] 2>/dev/null; then
+    success "Node.js v$(node -v 2>/dev/null | sed 's/v//')"
+  else
+    info "Installing Node.js..."
+    auto_install_node
+    if check_command node; then
+      success "Node.js v$(node -v 2>/dev/null | sed 's/v//')"
+    else
+      error "Failed to install Node.js. Install manually: https://nodejs.org"
+      exit 1
+    fi
+  fi
+
+  # pnpm
+  auto_install_pnpm
+  check_command pnpm && success "pnpm $(pnpm -v 2>/dev/null)" || warn "pnpm not available"
+
+  # Redis
+  if redis-cli ping &>/dev/null 2>&1; then
+    success "Redis: running"
+  else
+    info "Installing Redis..."
+    auto_install_redis
+    redis-cli ping &>/dev/null 2>&1 && success "Redis: running" || warn "Redis: will start on first use"
+  fi
+
+  # GitHub CLI
+  if check_command gh; then
+    success "GitHub CLI: $(gh --version 2>/dev/null | head -1 | awk '{print $3}')"
+  else
+    info "Installing GitHub CLI..."
+    auto_install_gh
+    check_command gh && success "GitHub CLI: installed" || info "GitHub CLI: agent will use OAuth Device Flow instead"
+  fi
+
+  # ═══════════════════════════════════════════════════
+  # STEP 4: Download, build, install app
+  # ═══════════════════════════════════════════════════
+  step 4 "Installing MegaSloth"
 
   if [ -d "$MEGASLOTH_DIR" ]; then
-    info "Existing installation found, updating..."
+    info "Updating existing installation..."
     cd "$MEGASLOTH_DIR"
     git pull origin main 2>/dev/null || {
-      warn "Could not update, performing fresh install..."
+      warn "Update failed, performing fresh install..."
       cd "$HOME"
       rm -rf "$MEGASLOTH_DIR"
       git clone --depth 1 "$MEGASLOTH_REPO" "$MEGASLOTH_DIR"
       cd "$MEGASLOTH_DIR"
     }
   else
+    info "Downloading MegaSloth..."
     git clone --depth 1 "$MEGASLOTH_REPO" "$MEGASLOTH_DIR"
     cd "$MEGASLOTH_DIR"
   fi
 
-  success "Downloaded to $MEGASLOTH_DIR"
+  success "Source: $MEGASLOTH_DIR"
 
-  # ── Step 5: Install Dependencies & Build ──
-  step 5 "Installing dependencies"
-
+  # Install deps & build core
+  info "Installing packages..."
   pnpm install --frozen-lockfile 2>/dev/null || pnpm install
-  success "Dependencies installed"
+  success "Packages installed"
 
-  info "Building MegaSloth..."
-  pnpm build 2>/dev/null || {
-    warn "TypeScript build skipped (will use tsx for dev mode)"
-  }
-  success "Build complete"
+  info "Building core..."
+  pnpm build 2>/dev/null || warn "TypeScript build skipped (dev mode available)"
 
   # Create data directories
   mkdir -p .megasloth/data .megasloth/skills
 
-  # ── Step 6: Setup Wizard ──
-  step 6 "Configuration"
+  # Generate .env (no user interaction needed beyond what we already have)
+  local anthropic_key="" openai_key="" gemini_key=""
+  case "$LLM_PROVIDER" in
+    claude)  anthropic_key="${api_key:-}" ;;
+    openai)  openai_key="${api_key:-}" ;;
+    gemini)  gemini_key="${api_key:-}" ;;
+  esac
 
-  if [ -t 0 ]; then
-    # Interactive terminal
-    run_setup_wizard
-  else
-    # Non-interactive (piped) — create default env
-    warn "Non-interactive mode — creating default .env"
-    cp .env.example .env 2>/dev/null || true
-    info "Edit $MEGASLOTH_DIR/.env to configure your API keys"
+  local webhook_secret
+  webhook_secret=$(openssl rand -hex 20 2>/dev/null || head -c 40 /dev/urandom | od -A n -t x1 | tr -d ' \n')
+
+  # Auto-detect GitHub token if gh is logged in
+  local github_token=""
+  if check_command gh && gh auth status &>/dev/null 2>&1; then
+    github_token=$(gh auth token 2>/dev/null || true)
   fi
 
-  success "Configuration saved to $MEGASLOTH_DIR/.env"
+  cat > "$MEGASLOTH_DIR/.env" <<ENVEOF
+# MegaSloth Configuration (auto-generated)
+LLM_PROVIDER=${LLM_PROVIDER}
+ANTHROPIC_API_KEY=${anthropic_key}
+OPENAI_API_KEY=${openai_key}
+GEMINI_API_KEY=${gemini_key}
+GITHUB_TOKEN=${github_token}
+GITHUB_WEBHOOK_SECRET=${webhook_secret}
+SECURITY_PROFILE=full
+HTTP_PORT=13000
+WEBHOOK_PORT=3001
+WEBSOCKET_PORT=18789
+REDIS_URL=redis://localhost:6379
+DATABASE_URL=${MEGASLOTH_DIR}/.megasloth/data/megasloth.db
+LOG_LEVEL=info
+ENVEOF
 
-  # ── Step 7: Create Global Command ──
-  step 7 "Creating megasloth command"
+  success "Configuration generated"
 
-  # Create wrapper script
-  WRAPPER_SCRIPT=$(cat <<'WRAPPER'
-#!/usr/bin/env bash
-MEGASLOTH_DIR="INSTALL_DIR_PLACEHOLDER"
-
-case "${1:-}" in
-  start)
-    echo ""
-    echo "  🦥 Starting MegaSloth..."
-    echo ""
+  # Build Electron desktop app
+  info "Building desktop app..."
+  if [ -d "desktop" ]; then
+    cd desktop
+    pnpm install 2>/dev/null || npm install
+    if [ "$OS" = "macos" ]; then
+      pnpm build:mac 2>/dev/null && success "Desktop app built (macOS)" || warn "Desktop build skipped — use CLI mode"
+    elif [ "$OS" = "linux" ]; then
+      pnpm build:linux 2>/dev/null && success "Desktop app built (Linux)" || warn "Desktop build skipped — use CLI mode"
+    fi
     cd "$MEGASLOTH_DIR"
-    if [ -f "dist/index.js" ]; then
-      node dist/index.js
-    else
-      npx tsx src/index.ts
-    fi
-    ;;
-  start:bg)
-    echo ""
-    echo "  🦥 Starting MegaSloth in background..."
-    cd "$MEGASLOTH_DIR"
-    if [ -f "dist/index.js" ]; then
-      nohup node dist/index.js > .megasloth/data/megasloth.log 2>&1 &
-    else
-      nohup npx tsx src/index.ts > .megasloth/data/megasloth.log 2>&1 &
-    fi
-    echo $! > .megasloth/data/megasloth.pid
-    echo "  ✓ MegaSloth running in background (PID: $!)"
-    echo "  ✓ Logs: $MEGASLOTH_DIR/.megasloth/data/megasloth.log"
-    echo ""
-    ;;
-  stop)
-    PID_FILE="$MEGASLOTH_DIR/.megasloth/data/megasloth.pid"
-    if [ -f "$PID_FILE" ]; then
-      PID=$(cat "$PID_FILE")
-      if kill -0 "$PID" 2>/dev/null; then
-        kill "$PID"
-        rm -f "$PID_FILE"
-        echo "  ✓ MegaSloth stopped (PID: $PID)"
-      else
-        rm -f "$PID_FILE"
-        echo "  MegaSloth was not running"
-      fi
-    else
-      echo "  MegaSloth is not running"
-    fi
-    ;;
-  status)
-    PID_FILE="$MEGASLOTH_DIR/.megasloth/data/megasloth.pid"
-    echo ""
-    echo "  🦥 MegaSloth Status"
-    echo ""
-    echo "  Install dir: $MEGASLOTH_DIR"
-    if [ -f "$PID_FILE" ]; then
-      PID=$(cat "$PID_FILE")
-      if kill -0 "$PID" 2>/dev/null; then
-        echo "  Status:      ✓ Running (PID: $PID)"
-      else
-        echo "  Status:      ✗ Not running (stale PID)"
-      fi
-    else
-      echo "  Status:      ✗ Not running"
-    fi
-    redis-cli ping &>/dev/null && echo "  Redis:       ✓ Connected" || echo "  Redis:       ✗ Not reachable"
-    curl -sf http://localhost:13000/health &>/dev/null && echo "  HTTP API:    ✓ Healthy" || echo "  HTTP API:    ✗ Not reachable"
-    echo ""
-    ;;
-  logs)
-    LOG_FILE="$MEGASLOTH_DIR/.megasloth/data/megasloth.log"
-    if [ -f "$LOG_FILE" ]; then
-      tail -f "$LOG_FILE"
-    else
-      echo "  No log file found. Start MegaSloth first: megasloth start:bg"
-    fi
-    ;;
-  config)
-    "${EDITOR:-nano}" "$MEGASLOTH_DIR/.env"
-    ;;
-  update)
-    echo "  🦥 Updating MegaSloth..."
-    cd "$MEGASLOTH_DIR"
-    git pull origin main
-    pnpm install
-    pnpm build 2>/dev/null || true
-    echo "  ✓ MegaSloth updated!"
-    ;;
-  uninstall)
-    echo ""
-    echo "  ⚠  This will remove MegaSloth from your system."
-    echo -n "  Are you sure? [y/N]: "
-    read -r yn
-    case "$yn" in
-      [yY]*)
-        rm -rf "$MEGASLOTH_DIR"
-        rm -f "SELF_PATH_PLACEHOLDER"
-        echo "  ✓ MegaSloth has been uninstalled."
-        ;;
-      *)
-        echo "  Cancelled."
-        ;;
-    esac
-    ;;
-  help|--help|-h|"")
-    echo ""
-    echo "  🦥 MegaSloth - AI-Powered Repository Operations Agent"
-    echo ""
-    echo "  Usage: megasloth <command>"
-    echo ""
-    echo "  Commands:"
-    echo "    start       Start MegaSloth (foreground)"
-    echo "    start:bg    Start MegaSloth (background daemon)"
-    echo "    stop        Stop background MegaSloth"
-    echo "    status      Show current status"
-    echo "    logs        Follow log output"
-    echo "    config      Edit configuration (.env)"
-    echo "    update      Update to latest version"
-    echo "    uninstall   Remove MegaSloth"
-    echo "    help        Show this help message"
-    echo ""
-    echo "  Docs: https://github.com/stronghuni/MegaSloth"
-    echo ""
-    ;;
-  *)
-    echo "  Unknown command: $1"
-    echo "  Run 'megasloth help' for usage"
-    exit 1
-    ;;
-esac
-WRAPPER
-  )
+  fi
 
-  # Replace placeholders
-  WRAPPER_SCRIPT="${WRAPPER_SCRIPT//INSTALL_DIR_PLACEHOLDER/$MEGASLOTH_DIR}"
+  # ═══════════════════════════════════════════════════
+  # STEP 5: Create command + launch
+  # ═══════════════════════════════════════════════════
+  step 5 "Finalizing"
 
-  # Determine install path
+  # Create CLI wrapper
   if [ -w "/usr/local/bin" ]; then
     INSTALL_BIN="/usr/local/bin/megasloth"
   elif [ -d "$HOME/.local/bin" ]; then
@@ -677,90 +390,101 @@ WRAPPER
     INSTALL_BIN="$HOME/.local/bin/megasloth"
   fi
 
-  WRAPPER_SCRIPT="${WRAPPER_SCRIPT//SELF_PATH_PLACEHOLDER/$INSTALL_BIN}"
+  cat > "$INSTALL_BIN" <<'WRAPPER'
+#!/usr/bin/env bash
+MEGASLOTH_DIR="INSTALL_DIR_PLACEHOLDER"
+cd "$MEGASLOTH_DIR" || exit 1
 
-  echo "$WRAPPER_SCRIPT" > "$INSTALL_BIN"
+case "${1:-}" in
+  start)
+    echo "  🦥 Starting MegaSloth..."
+    if [ -f "dist/index.js" ]; then node dist/index.js
+    else npx tsx src/index.ts; fi ;;
+  start:bg)
+    echo "  🦥 Starting MegaSloth in background..."
+    if [ -f "dist/index.js" ]; then nohup node dist/index.js > .megasloth/data/megasloth.log 2>&1 &
+    else nohup npx tsx src/index.ts > .megasloth/data/megasloth.log 2>&1 &; fi
+    echo $! > .megasloth/data/megasloth.pid
+    echo "  ✓ Running (PID: $!)" ;;
+  stop)
+    [ -f ".megasloth/data/megasloth.pid" ] && kill "$(cat .megasloth/data/megasloth.pid)" 2>/dev/null && rm -f .megasloth/data/megasloth.pid && echo "  ✓ Stopped" || echo "  Not running" ;;
+  app)
+    APP_PATH=""
+    [ -d "desktop/release" ] && APP_PATH=$(find desktop/release -name "MegaSloth*" -type d 2>/dev/null | head -1)
+    if [ -n "$APP_PATH" ] && [ "$OSTYPE" = "darwin"* ]; then open "$APP_PATH"
+    elif [ -n "$APP_PATH" ]; then "$APP_PATH" &
+    else echo "  Desktop app not built. Run: megasloth start"; fi ;;
+  status)
+    echo "  🦥 MegaSloth Status"
+    echo "  Install: $MEGASLOTH_DIR"
+    [ -f ".megasloth/data/megasloth.pid" ] && kill -0 "$(cat .megasloth/data/megasloth.pid)" 2>/dev/null && echo "  Agent: ✓ Running" || echo "  Agent: ✗ Stopped"
+    redis-cli ping &>/dev/null && echo "  Redis: ✓ Connected" || echo "  Redis: ✗ Not reachable"
+    curl -sf http://localhost:13000/health &>/dev/null && echo "  API:   ✓ Healthy" || echo "  API:   ✗ Not reachable" ;;
+  logs)   tail -f .megasloth/data/megasloth.log 2>/dev/null || echo "  No logs yet. Start first: megasloth start" ;;
+  config) "${EDITOR:-nano}" .env ;;
+  update) git pull origin main && pnpm install && pnpm build 2>/dev/null; echo "  ✓ Updated" ;;
+  uninstall)
+    echo -n "  Remove MegaSloth? [y/N]: "; read -r yn
+    case "$yn" in [yY]*) rm -rf "$MEGASLOTH_DIR" "SELF_PATH_PLACEHOLDER"; echo "  ✓ Uninstalled" ;; *) echo "  Cancelled" ;; esac ;;
+  help|--help|-h|"")
+    echo "  🦥 MegaSloth — Full Automation Agent"
+    echo ""
+    echo "  megasloth start      Start agent (foreground)"
+    echo "  megasloth start:bg   Start agent (background)"
+    echo "  megasloth app        Launch desktop app"
+    echo "  megasloth stop       Stop agent"
+    echo "  megasloth status     Show status"
+    echo "  megasloth logs       View logs"
+    echo "  megasloth config     Edit settings"
+    echo "  megasloth update     Update to latest"
+    echo "  megasloth uninstall  Remove MegaSloth" ;;
+  *) echo "  Unknown: $1 — run 'megasloth help'" ;;
+esac
+WRAPPER
+
+  sed -i.bak "s|INSTALL_DIR_PLACEHOLDER|$MEGASLOTH_DIR|g" "$INSTALL_BIN" 2>/dev/null || \
+  sed -i '' "s|INSTALL_DIR_PLACEHOLDER|$MEGASLOTH_DIR|g" "$INSTALL_BIN"
+  sed -i.bak "s|SELF_PATH_PLACEHOLDER|$INSTALL_BIN|g" "$INSTALL_BIN" 2>/dev/null || \
+  sed -i '' "s|SELF_PATH_PLACEHOLDER|$INSTALL_BIN|g" "$INSTALL_BIN"
+  rm -f "${INSTALL_BIN}.bak"
   chmod +x "$INSTALL_BIN"
-  success "Command installed: $INSTALL_BIN"
+  success "Command: $INSTALL_BIN"
 
-  # Check if bin is in PATH
+  # Add to PATH if needed
   if ! echo "$PATH" | grep -q "$(dirname "$INSTALL_BIN")"; then
-    warn "$(dirname "$INSTALL_BIN") is not in your PATH"
-
     SHELL_RC=""
     case "$SHELL" in
       */zsh)  SHELL_RC="$HOME/.zshrc" ;;
       */bash) SHELL_RC="$HOME/.bashrc" ;;
-      */fish) SHELL_RC="$HOME/.config/fish/config.fish" ;;
     esac
-
     if [ -n "$SHELL_RC" ]; then
       echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> "$SHELL_RC"
-      info "Added to $SHELL_RC — restart your terminal or run:"
-      echo -e "    ${DIM}source $SHELL_RC${NC}"
+      info "Added to $SHELL_RC — restart terminal or: source $SHELL_RC"
     fi
   fi
 
-  # ── Step 8: Auto-Provision Credentials ──
-  step 8 "Auto-provisioning credentials"
-
-  if [ -n "${github_token:-}" ]; then
-    success "GitHub: already configured"
-  else
-    if command -v gh &>/dev/null; then
-      info "Attempting GitHub login via gh CLI..."
-      if gh auth login --web 2>/dev/null; then
-        github_token=$(gh auth token 2>/dev/null || true)
-        if [ -n "${github_token:-}" ]; then
-          # Update .env with new token
-          if [ "$(uname -s)" = "Darwin" ]; then
-            sed -i '' "s|^GITHUB_TOKEN=.*|GITHUB_TOKEN=${github_token}|" "$MEGASLOTH_DIR/.env"
-          else
-            sed -i "s|^GITHUB_TOKEN=.*|GITHUB_TOKEN=${github_token}|" "$MEGASLOTH_DIR/.env"
-          fi
-          success "GitHub: token provisioned via gh CLI"
-        fi
-      else
-        info "GitHub: will auto-provision on first use via OAuth Device Flow"
-      fi
-    else
-      info "GitHub: install 'gh' CLI for easy auth, or set GITHUB_TOKEN in .env"
-    fi
-  fi
-
-  # Check other CLIs
-  if command -v glab &>/dev/null && glab auth status &>/dev/null 2>&1; then
-    success "GitLab: CLI detected and authenticated"
-  fi
-  if command -v aws &>/dev/null && aws sts get-caller-identity &>/dev/null 2>&1; then
-    success "AWS: CLI configured"
-  fi
-  if command -v gcloud &>/dev/null && gcloud auth print-access-token &>/dev/null 2>&1; then
-    success "GCP: CLI configured"
-  fi
-
-  info "All missing credentials will be auto-provisioned on demand"
-
-  # ── Done! ──
+  # ═══════════════════════════════════════════════════
+  # Done!
+  # ═══════════════════════════════════════════════════
   echo ""
   echo -e "  ${GREEN}${BOLD}══════════════════════════════════════════════════════${NC}"
   echo -e "  ${GREEN}${BOLD}  🦥  MegaSloth installed successfully!${NC}"
   echo -e "  ${GREEN}${BOLD}══════════════════════════════════════════════════════${NC}"
   echo ""
-  echo -e "  ${WHITE}Quick Start:${NC}"
+  echo -e "  ${WHITE}The agent has full control. It will automatically:${NC}"
   echo ""
-  echo -e "    ${CYAN}megasloth start${NC}       Start in foreground"
-  echo -e "    ${CYAN}megasloth start:bg${NC}    Start as background daemon"
-  echo -e "    ${CYAN}megasloth status${NC}      Check if running"
-  echo -e "    ${CYAN}megasloth config${NC}      Edit configuration"
-  echo -e "    ${CYAN}megasloth logs${NC}        View live logs"
-  echo -e "    ${CYAN}megasloth help${NC}        Show all commands"
+  echo -e "    ${GREEN}✓${NC} Provision GitHub/GitLab/AWS/GCP credentials"
+  echo -e "    ${GREEN}✓${NC} Set up CI/CD pipelines and webhooks"
+  echo -e "    ${GREEN}✓${NC} Execute shell commands and manage processes"
+  echo -e "    ${GREEN}✓${NC} Browse the web and automate browser tasks"
+  echo -e "    ${GREEN}✓${NC} Read/write/edit local files"
+  echo -e "    ${GREEN}✓${NC} Plan and execute complex workflows"
   echo ""
-  echo -e "  ${WHITE}Webhook URLs (configure in your Git platform):${NC}"
+  echo -e "  ${WHITE}Get started:${NC}"
   echo ""
-  echo -e "    GitHub:    ${DIM}https://your-server:3001/webhook/github${NC}"
-  echo -e "    GitLab:    ${DIM}https://your-server:3001/webhook/gitlab${NC}"
-  echo -e "    Bitbucket: ${DIM}https://your-server:3001/webhook/bitbucket${NC}"
+  echo -e "    ${CYAN}megasloth start${NC}    Start the agent"
+  echo -e "    ${CYAN}megasloth app${NC}      Launch desktop app"
+  echo -e "    ${CYAN}megasloth help${NC}     Show all commands"
   echo ""
   echo -e "  ${WHITE}Docs:${NC} ${BLUE}https://github.com/stronghuni/MegaSloth${NC}"
   echo ""
