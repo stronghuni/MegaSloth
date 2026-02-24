@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="MegaSloth" width="800" />
+  <img src="readme_image.png" alt="MegaSloth" width="800" />
 </p>
 
 <h1 align="center">🦥 MegaSloth</h1>

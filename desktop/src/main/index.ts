@@ -428,6 +428,121 @@ ipcMain.handle('test-provider', async (_, provider: string) => {
   }
 });
 
+// ── Chat (Direct LLM) ────────────────────────────────────────────
+
+interface ChatMsg { role: string; content: string }
+const chatHistory: ChatMsg[] = [];
+
+function resolveApiKey(env: Record<string, string>): { provider: string; apiKey: string } | null {
+  const provider = env.LLM_PROVIDER || 'claude';
+  const keyMap: Record<string, string> = { claude: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', gemini: 'GEMINI_API_KEY' };
+  const apiKey = env[keyMap[provider] || ''] || '';
+  if (!apiKey || apiKey.length < 10 || apiKey.startsWith('your_')) return null;
+  return { provider, apiKey };
+}
+
+async function callClaude(apiKey: string, messages: ChatMsg[]): Promise<string> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      messages: messages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
+    }),
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(err?.error?.message || `Claude API error: ${res.status}`);
+  }
+  const data = await res.json() as { content: Array<{ text: string }> };
+  return data.content?.map(c => c.text).join('') || '';
+}
+
+async function callOpenAI(apiKey: string, messages: ChatMsg[]): Promise<string> {
+  const input = messages.map(m => ({ role: m.role as string, content: m.content }));
+  const res = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: 'gpt-5.2',
+      input,
+      reasoning: { effort: 'medium' },
+    }),
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(err?.error?.message || `OpenAI API error: ${res.status}`);
+  }
+  const data = await res.json() as { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }> };
+  return data.output_text || data.output?.flatMap(o => o.content?.map(c => c.text) || []).join('') || '';
+}
+
+async function callGemini(apiKey: string, messages: ChatMsg[]): Promise<string> {
+  const contents = messages.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }));
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents }),
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(err?.error?.message || `Gemini API error: ${res.status}`);
+  }
+  const data = await res.json() as { candidates: Array<{ content: { parts: Array<{ text: string }> } }> };
+  return data.candidates?.[0]?.content?.parts?.map(p => p.text).join('') || '';
+}
+
+ipcMain.handle('chat', async (_, message: string) => {
+  const env = parseEnvFile();
+  const resolved = resolveApiKey(env);
+  if (!resolved) {
+    return { error: 'No API key configured. Go to Settings to add one.' };
+  }
+
+  chatHistory.push({ role: 'user', content: message });
+
+  try {
+    let response = '';
+    switch (resolved.provider) {
+      case 'claude':
+        response = await callClaude(resolved.apiKey, chatHistory);
+        break;
+      case 'openai':
+        response = await callOpenAI(resolved.apiKey, chatHistory);
+        break;
+      case 'gemini':
+        response = await callGemini(resolved.apiKey, chatHistory);
+        break;
+      default:
+        return { error: `Unknown provider: ${resolved.provider}` };
+    }
+    chatHistory.push({ role: 'assistant', content: response });
+    return { response, provider: resolved.provider };
+  } catch (e) {
+    chatHistory.pop();
+    const msg = e instanceof Error ? e.message : 'Unknown error';
+    return { error: msg };
+  }
+});
+
+ipcMain.handle('clear-chat', () => {
+  chatHistory.length = 0;
+  return true;
+});
+
+ipcMain.handle('get-chat-status', () => {
+  const env = parseEnvFile();
+  const resolved = resolveApiKey(env);
+  return { ready: !!resolved, provider: resolved?.provider || null };
+});
+
 // ── Repository Discovery ─────────────────────────────────────────
 
 function parseEnvFile(): Record<string, string> {

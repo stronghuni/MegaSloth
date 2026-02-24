@@ -25,4 +25,7 @@ contextBridge.exposeInMainWorld('megasloth', {
   getTheme: () => ipcRenderer.invoke('get-theme'),
   setTheme: (theme: string) => ipcRenderer.invoke('set-theme', theme),
   fetchRepositories: () => ipcRenderer.invoke('fetch-repositories'),
+  chat: (message: string) => ipcRenderer.invoke('chat', message),
+  clearChat: () => ipcRenderer.invoke('clear-chat'),
+  getChatStatus: () => ipcRenderer.invoke('get-chat-status'),
 });

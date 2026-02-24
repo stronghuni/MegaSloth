@@ -29,6 +29,9 @@ declare global {
       getTheme: () => Promise<string>;
       setTheme: (theme: string) => Promise<boolean>;
       fetchRepositories: () => Promise<unknown>;
+      chat: (message: string) => Promise<{ response?: string; error?: string; provider?: string }>;
+      clearChat: () => Promise<boolean>;
+      getChatStatus: () => Promise<{ ready: boolean; provider: string | null }>;
     };
   }
 }
