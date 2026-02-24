@@ -52,7 +52,7 @@ error()   { echo -e "  ${RED}✗${NC} $1"; }
 step()    { echo -e "\n  ${MAGENTA}${BOLD}[$1/$TOTAL_STEPS]${NC} ${WHITE}$2${NC}\n"; }
 ask()     { echo -ne "  ${CYAN}?${NC} $1"; }
 
-TOTAL_STEPS=7
+TOTAL_STEPS=8
 
 # ─────────────────────────────────────────────────────
 # OS Detection
@@ -166,6 +166,48 @@ install_pnpm() {
     info "Installing pnpm..."
     npm install -g pnpm@latest 2>/dev/null || sudo npm install -g pnpm@latest
     success "pnpm installed"
+  fi
+}
+
+install_gh() {
+  if check_command gh; then
+    return 0
+  fi
+
+  info "Installing GitHub CLI (gh)..."
+  if [ "$OS" = "macos" ]; then
+    if check_command brew; then
+      brew install gh
+    else
+      warn "Homebrew not available — skipping gh install"
+      return 1
+    fi
+  elif [ "$OS" = "linux" ]; then
+    if check_command apt-get; then
+      (type -p wget >/dev/null || sudo apt-get install -y wget) \
+        && sudo mkdir -p -m 755 /etc/apt/keyrings \
+        && wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+        && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt-get update && sudo apt-get install -y gh
+    elif check_command dnf; then
+      sudo dnf install -y 'dnf-command(config-manager)' && sudo dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && sudo dnf install -y gh
+    elif check_command yum; then
+      sudo yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && sudo yum install -y gh
+    elif check_command pacman; then
+      sudo pacman -Sy --noconfirm github-cli
+    else
+      warn "Could not install gh CLI automatically"
+      return 1
+    fi
+  fi
+
+  if check_command gh; then
+    success "GitHub CLI (gh) installed"
+    return 0
+  else
+    warn "gh installation failed — GitHub token can still be set manually"
+    return 1
   fi
 }
 
@@ -398,8 +440,48 @@ main() {
     esac
   fi
 
-  # ── Step 3: Download MegaSloth ──
-  step 3 "Downloading MegaSloth"
+  # ── Step 3: Check GitHub CLI ──
+  step 3 "Checking GitHub CLI (gh)"
+
+  if check_command gh; then
+    success "GitHub CLI (gh) found: $(gh --version 2>/dev/null | head -1)"
+    if gh auth status &>/dev/null 2>&1; then
+      success "GitHub CLI: already authenticated"
+    else
+      info "GitHub CLI installed but not logged in"
+      ask "Log in to GitHub now? [Y/n]: "
+      read -r yn
+      case "$yn" in
+        [nN]*) info "You can log in later: gh auth login" ;;
+        *)
+          gh auth login --web 2>/dev/null || gh auth login || warn "Login skipped — run 'gh auth login' later"
+          ;;
+      esac
+    fi
+  else
+    ask "Install GitHub CLI (gh) for automatic token management? [Y/n]: "
+    read -r yn
+    case "$yn" in
+      [nN]*)
+        info "Skipped — you can set GITHUB_TOKEN manually in .env later"
+        ;;
+      *)
+        if install_gh; then
+          ask "Log in to GitHub now? [Y/n]: "
+          read -r yn2
+          case "$yn2" in
+            [nN]*) info "You can log in later: gh auth login" ;;
+            *)
+              gh auth login --web 2>/dev/null || gh auth login || warn "Login skipped"
+              ;;
+          esac
+        fi
+        ;;
+    esac
+  fi
+
+  # ── Step 4: Download MegaSloth ──
+  step 4 "Downloading MegaSloth"
 
   if [ -d "$MEGASLOTH_DIR" ]; then
     info "Existing installation found, updating..."
@@ -418,8 +500,8 @@ main() {
 
   success "Downloaded to $MEGASLOTH_DIR"
 
-  # ── Step 4: Install Dependencies & Build ──
-  step 4 "Installing dependencies"
+  # ── Step 5: Install Dependencies & Build ──
+  step 5 "Installing dependencies"
 
   pnpm install --frozen-lockfile 2>/dev/null || pnpm install
   success "Dependencies installed"
@@ -433,8 +515,8 @@ main() {
   # Create data directories
   mkdir -p .megasloth/data .megasloth/skills
 
-  # ── Step 5: Setup Wizard ──
-  step 5 "Configuration"
+  # ── Step 6: Setup Wizard ──
+  step 6 "Configuration"
 
   if [ -t 0 ]; then
     # Interactive terminal
@@ -448,8 +530,8 @@ main() {
 
   success "Configuration saved to $MEGASLOTH_DIR/.env"
 
-  # ── Step 6: Create Global Command ──
-  step 6 "Creating megasloth command"
+  # ── Step 7: Create Global Command ──
+  step 7 "Creating megasloth command"
 
   # Create wrapper script
   WRAPPER_SCRIPT=$(cat <<'WRAPPER'
@@ -619,8 +701,8 @@ WRAPPER
     fi
   fi
 
-  # ── Step 7: Auto-Provision Credentials ──
-  step 7 "Auto-provisioning credentials"
+  # ── Step 8: Auto-Provision Credentials ──
+  step 8 "Auto-provisioning credentials"
 
   if [ -n "${github_token:-}" ]; then
     success "GitHub: already configured"
