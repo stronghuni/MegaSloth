@@ -2,12 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Onboarding } from './pages/Onboarding';
 import { Chat } from './pages/Chat';
-import { Dashboard } from './pages/Dashboard';
 import { Repositories } from './pages/Repositories';
-import { Logs } from './pages/Logs';
 import { Settings } from './pages/Settings';
 
-export type Page = 'chat' | 'dashboard' | 'repositories' | 'logs' | 'settings';
+export type Page = 'chat' | 'repositories' | 'settings';
 
 const COLLAPSE_THRESHOLD = 960;
 
@@ -54,9 +52,7 @@ export function App() {
   const renderPage = () => {
     switch (currentPage) {
       case 'chat': return <Chat />;
-      case 'dashboard': return <Dashboard />;
       case 'repositories': return <Repositories />;
-      case 'logs': return <Logs />;
       case 'settings': return <Settings />;
     }
   };

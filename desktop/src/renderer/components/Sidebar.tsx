@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   MessageSquare,
-  LayoutDashboard,
   GitBranch,
-  ScrollText,
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
@@ -29,9 +27,14 @@ declare global {
       getTheme: () => Promise<string>;
       setTheme: (theme: string) => Promise<boolean>;
       fetchRepositories: () => Promise<unknown>;
-      chat: (message: string) => Promise<{ response?: string; error?: string; provider?: string }>;
+      chatStream: (message: string) => Promise<{ ok?: boolean; error?: string }>;
+      loadChatHistory: () => Promise<Array<{ role: string; content: string; timestamp?: number }>>;
       clearChat: () => Promise<boolean>;
       getChatStatus: () => Promise<{ ready: boolean; provider: string | null }>;
+      onChatChunk: (cb: (chunk: string) => void) => () => void;
+      onChatDone: (cb: (data: { provider: string }) => void) => () => void;
+      onChatError: (cb: (error: string) => void) => () => void;
+      onChatToolStatus: (cb: (status: { tool: string; args: string; output?: string; state: string }) => void) => () => void;
     };
   }
 }
@@ -45,9 +48,7 @@ interface SidebarProps {
 
 const NAV_ITEMS: Array<{ id: Page; label: string; Icon: React.ComponentType<{ className?: string }> }> = [
   { id: 'chat', label: 'Chat', Icon: MessageSquare },
-  { id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { id: 'repositories', label: 'Repos', Icon: GitBranch },
-  { id: 'logs', label: 'Logs', Icon: ScrollText },
   { id: 'settings', label: 'Settings', Icon: Settings },
 ];
 

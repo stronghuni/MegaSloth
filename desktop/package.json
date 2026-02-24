@@ -4,7 +4,7 @@
   "description": "MegaSloth Desktop - AI-Powered Repository Operations Agent",
   "main": "dist/main/index.js",
   "scripts": {
-    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "dev": "tsc -p tsconfig.main.json && concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "vite build && tsc -p tsconfig.main.json",
     "build:mac": "pnpm build && electron-builder --mac",
     "build:win": "pnpm build && electron-builder --win",
@@ -49,7 +49,10 @@
   },
   "dependencies": {
     "electron-store": "^10.0.0",
-    "lucide-react": "^0.575.0"
+    "lucide-react": "^0.575.0",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

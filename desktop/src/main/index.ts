@@ -1,7 +1,10 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell } from 'electron';
 import { join } from 'node:path';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { fork, type ChildProcess } from 'node:child_process';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { fork, exec, type ChildProcess } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execAsync = promisify(exec);
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -428,10 +431,155 @@ ipcMain.handle('test-provider', async (_, provider: string) => {
   }
 });
 
-// ── Chat (Direct LLM) ────────────────────────────────────────────
+// ── Chat Engine ──────────────────────────────────────────────────
 
-interface ChatMsg { role: string; content: string }
-const chatHistory: ChatMsg[] = [];
+interface ChatMsg { role: string; content: string; timestamp?: number }
+
+const MAX_CONTEXT_TOKENS = 24000;
+const SUMMARY_THRESHOLD = 20000;
+
+function estimateTokens(text: string): number { return Math.ceil(text.length / 3.5); }
+function historyTokens(msgs: ChatMsg[]): number { return msgs.reduce((s, m) => s + estimateTokens(m.content), 0); }
+
+function getChatDataDir(): string {
+  const dir = join(app.getPath('userData'), 'chat');
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function loadChatHistory(): ChatMsg[] {
+  const p = join(getChatDataDir(), 'history.json');
+  if (!existsSync(p)) return [];
+  try { return JSON.parse(readFileSync(p, 'utf-8')); } catch { return []; }
+}
+
+function saveChatHistory(msgs: ChatMsg[]) {
+  writeFileSync(join(getChatDataDir(), 'history.json'), JSON.stringify(msgs));
+}
+
+// Graph memory — lightweight entity/fact extraction stored as JSON
+interface GraphNode { id: string; label: string; facts: string[]; embedding?: number[]; updated: number }
+interface GraphEdge { source: string; target: string; relation: string }
+interface KnowledgeGraph { nodes: GraphNode[]; edges: GraphEdge[] }
+
+function loadGraph(): KnowledgeGraph {
+  const p = join(getChatDataDir(), 'graph.json');
+  if (!existsSync(p)) return { nodes: [], edges: [] };
+  try { return JSON.parse(readFileSync(p, 'utf-8')); } catch { return { nodes: [], edges: [] }; }
+}
+
+function saveGraph(g: KnowledgeGraph) {
+  writeFileSync(join(getChatDataDir(), 'graph.json'), JSON.stringify(g));
+}
+
+function cosineSim(a: number[], b: number[]): number {
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+  return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
+}
+
+async function getEmbedding(text: string, apiKey: string): Promise<number[]> {
+  const res = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: 'text-embedding-3-small', input: text.slice(0, 8000) }),
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) return [];
+  const data = await res.json() as { data?: Array<{ embedding: number[] }> };
+  return data.data?.[0]?.embedding || [];
+}
+
+async function extractAndUpdateGraph(userMsg: string, assistantMsg: string, env: Record<string, string>) {
+  const graph = loadGraph();
+  const openaiKey = env.OPENAI_API_KEY;
+  if (!openaiKey || openaiKey.length < 10 || openaiKey.startsWith('your_')) { saveGraph(graph); return; }
+
+  const resolved = resolveApiKey(env);
+  if (!resolved) return;
+
+  try {
+    const extractPrompt = `Extract key entities and relationships from this conversation turn. Return JSON only.
+Format: {"entities":[{"name":"...","facts":["..."]}],"relations":[{"source":"...","target":"...","relation":"..."}]}
+User: ${userMsg.slice(0, 2000)}
+Assistant: ${assistantMsg.slice(0, 2000)}`;
+
+    let extractJson = '';
+    if (resolved.provider === 'claude') {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': resolved.apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1024, messages: [{ role: 'user', content: extractPrompt }] }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (r.ok) {
+        const d = await r.json() as { content: Array<{ text: string }> };
+        extractJson = d.content?.[0]?.text || '';
+      }
+    } else {
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
+        body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 1024, messages: [{ role: 'user', content: extractPrompt }] }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (r.ok) {
+        const d = await r.json() as { choices: Array<{ message: { content: string } }> };
+        extractJson = d.choices?.[0]?.message?.content || '';
+      }
+    }
+
+    const match = extractJson.match(/\{[\s\S]*\}/);
+    if (!match) { saveGraph(graph); return; }
+    const parsed = JSON.parse(match[0]) as { entities?: Array<{ name: string; facts: string[] }>; relations?: Array<{ source: string; target: string; relation: string }> };
+
+    for (const ent of parsed.entities || []) {
+      const id = ent.name.toLowerCase().replace(/\s+/g, '_');
+      const existing = graph.nodes.find(n => n.id === id);
+      if (existing) {
+        for (const f of ent.facts) { if (!existing.facts.includes(f)) existing.facts.push(f); }
+        existing.updated = Date.now();
+      } else {
+        const emb = await getEmbedding(ent.name + ': ' + ent.facts.join('. '), openaiKey);
+        graph.nodes.push({ id, label: ent.name, facts: ent.facts, embedding: emb.length ? emb : undefined, updated: Date.now() });
+      }
+    }
+    for (const rel of parsed.relations || []) {
+      const sid = rel.source.toLowerCase().replace(/\s+/g, '_');
+      const tid = rel.target.toLowerCase().replace(/\s+/g, '_');
+      if (!graph.edges.find(e => e.source === sid && e.target === tid && e.relation === rel.relation)) {
+        graph.edges.push({ source: sid, target: tid, relation: rel.relation });
+      }
+    }
+    saveGraph(graph);
+  } catch { saveGraph(graph); }
+}
+
+async function retrieveGraphContext(query: string, env: Record<string, string>): Promise<string> {
+  const graph = loadGraph();
+  if (!graph.nodes.length) return '';
+  const openaiKey = env.OPENAI_API_KEY;
+  if (!openaiKey || openaiKey.length < 10 || openaiKey.startsWith('your_')) return '';
+
+  const queryEmb = await getEmbedding(query, openaiKey);
+  if (!queryEmb.length) return '';
+
+  const scored = graph.nodes
+    .filter(n => n.embedding?.length)
+    .map(n => ({ node: n, score: cosineSim(queryEmb, n.embedding!) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5)
+    .filter(s => s.score > 0.3);
+
+  if (!scored.length) return '';
+
+  const lines = scored.map(s => {
+    const rels = graph.edges.filter(e => e.source === s.node.id || e.target === s.node.id);
+    const relStr = rels.map(r => `${r.source} -[${r.relation}]-> ${r.target}`).join('; ');
+    return `[${s.node.label}] ${s.node.facts.join('. ')}${relStr ? ' | Relations: ' + relStr : ''}`;
+  });
+  return `<memory>\n${lines.join('\n')}\n</memory>`;
+}
 
 function resolveApiKey(env: Record<string, string>): { provider: string; apiKey: string } | null {
   const provider = env.LLM_PROVIDER || 'claude';
@@ -441,99 +589,534 @@ function resolveApiKey(env: Record<string, string>): { provider: string; apiKey:
   return { provider, apiKey };
 }
 
-async function callClaude(apiKey: string, messages: ChatMsg[]): Promise<string> {
+async function summarizeHistory(msgs: ChatMsg[], provider: string, apiKey: string): Promise<ChatMsg[]> {
+  const toSummarize = msgs.slice(0, -4);
+  const keep = msgs.slice(-4);
+  const text = toSummarize.map(m => `${m.role}: ${m.content}`).join('\n').slice(0, 12000);
+  const prompt = `Summarize this conversation concisely, preserving all key facts, decisions, and context:\n${text}`;
+
+  let summary = '';
+  try {
+    if (provider === 'claude') {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2048, messages: [{ role: 'user', content: prompt }] }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (r.ok) { const d = await r.json() as { content: Array<{ text: string }> }; summary = d.content?.[0]?.text || ''; }
+    } else if (provider === 'gemini') {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (r.ok) { const d = await r.json() as { candidates: Array<{ content: { parts: Array<{ text: string }> } }> }; summary = d.candidates?.[0]?.content?.parts?.[0]?.text || ''; }
+    } else {
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 2048, messages: [{ role: 'user', content: prompt }] }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (r.ok) { const d = await r.json() as { choices: Array<{ message: { content: string } }> }; summary = d.choices?.[0]?.message?.content || ''; }
+    }
+  } catch {}
+
+  if (!summary) return msgs.slice(-6);
+  return [{ role: 'system', content: `Previous conversation summary:\n${summary}`, timestamp: Date.now() }, ...keep];
+}
+
+// ── Agent Tools ─────────────────────────────────────────────────
+
+interface ToolCall { id: string; name: string; input: Record<string, unknown> }
+
+const AGENT_TOOLS = [
+  {
+    name: 'execute_command',
+    description: 'Execute a shell command. Use for git operations (status, log, diff, commit, push, pull, branch), build commands, package management (npm, pnpm), docker, curl, system utilities, etc.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        command: { type: 'string' as const, description: 'Shell command to execute' },
+        cwd: { type: 'string' as const, description: 'Working directory (defaults to project root)' },
+      },
+      required: ['command'],
+    },
+  },
+  {
+    name: 'read_file',
+    description: 'Read the contents of a file from the filesystem',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: { type: 'string' as const, description: 'File path (absolute or relative to project root)' },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'write_file',
+    description: 'Write content to a file. Creates parent directories if needed.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: { type: 'string' as const, description: 'File path' },
+        content: { type: 'string' as const, description: 'Content to write' },
+      },
+      required: ['path', 'content'],
+    },
+  },
+  {
+    name: 'list_directory',
+    description: 'List files and directories with types and sizes',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: { type: 'string' as const, description: 'Directory path (defaults to project root)' },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'search_files',
+    description: 'Search for text patterns in files recursively using grep',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        pattern: { type: 'string' as const, description: 'Search pattern (regex)' },
+        path: { type: 'string' as const, description: 'Directory to search in (defaults to project root)' },
+        include: { type: 'string' as const, description: 'File glob to include (e.g., "*.ts")' },
+      },
+      required: ['pattern'],
+    },
+  },
+];
+
+function buildSystemPrompt(): string {
+  const projectRoot = getProjectRoot();
+  const env = parseEnvFile();
+  const platforms: string[] = [];
+  const isReal = (v?: string) => !!v && v.length > 10 && !v.startsWith('your_');
+  if (isReal(env.GITHUB_TOKEN)) platforms.push('GitHub');
+  if (isReal(env.GITLAB_TOKEN)) platforms.push('GitLab');
+  if (isReal(env.BITBUCKET_TOKEN)) platforms.push('Bitbucket');
+
+  return `You are MegaSloth, an AI-powered full automation DevOps agent that monitors and manages Git repositories and development workflows.
+
+Project root: ${projectRoot}
+${platforms.length ? `Connected Git platforms: ${platforms.join(', ')}` : 'No Git platform tokens configured yet.'}
+
+You have access to these tools:
+- execute_command: Run any shell command (git, npm, pnpm, docker, curl, etc.)
+- read_file: Read file contents
+- write_file: Create or modify files
+- list_directory: List directory contents
+- search_files: Search for text patterns in code
+
+CRITICAL INSTRUCTIONS:
+1. You are NOT a basic chatbot. You are an autonomous agent with FULL system access.
+2. When users ask about their repo, code, builds, or anything requiring data — USE YOUR TOOLS to check and respond with REAL data.
+3. Don't just describe what you would do — ACTUALLY DO IT using tools.
+4. After making changes, VERIFY them (e.g., run the command, read the file, check git status).
+5. Be proactive: when reviewing code, actually read it. When debugging, actually run commands.
+6. Format responses in markdown. Use code blocks for command outputs.
+7. For git operations, always use execute_command with the appropriate git command.
+8. Always respond in Korean unless the user writes in another language.`;
+}
+
+async function executeTool(name: string, input: Record<string, unknown>): Promise<string> {
+  const projectRoot = getProjectRoot();
+  switch (name) {
+    case 'execute_command': {
+      const cmd = input.command as string;
+      const cwd = (input.cwd as string) || projectRoot;
+      try {
+        const { stdout, stderr } = await execAsync(cmd, {
+          cwd, timeout: 60000, maxBuffer: 2 * 1024 * 1024,
+          env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+        });
+        return (stdout + (stderr ? '\nSTDERR:\n' + stderr : '')).trim() || '(no output)';
+      } catch (e: unknown) {
+        const err = e as { stdout?: string; stderr?: string; message?: string };
+        return ((err.stdout || '') + (err.stderr ? '\nSTDERR:\n' + err.stderr : '')).trim() || `Command failed: ${err.message || 'unknown'}`;
+      }
+    }
+    case 'read_file': {
+      const p = input.path as string;
+      const abs = p.startsWith('/') ? p : join(projectRoot, p);
+      if (!existsSync(abs)) return `File not found: ${abs}`;
+      const c = readFileSync(abs, 'utf-8');
+      return c.length > 100000 ? c.slice(0, 100000) + '\n...(truncated at 100KB)' : c;
+    }
+    case 'write_file': {
+      const p = input.path as string;
+      const abs = p.startsWith('/') ? p : join(projectRoot, p);
+      mkdirSync(join(abs, '..'), { recursive: true });
+      writeFileSync(abs, input.content as string);
+      return `File written: ${abs} (${(input.content as string).length} bytes)`;
+    }
+    case 'list_directory': {
+      const p = (input.path as string) || '.';
+      const abs = p.startsWith('/') ? p : join(projectRoot, p);
+      if (!existsSync(abs)) return `Directory not found: ${abs}`;
+      const entries = readdirSync(abs);
+      const lines = entries.slice(0, 200).map(e => {
+        try {
+          const s = statSync(join(abs, e));
+          return `${s.isDirectory() ? 'd' : '-'} ${e}${s.isDirectory() ? '/' : ''} (${s.size}B)`;
+        } catch { return `? ${e}`; }
+      });
+      if (entries.length > 200) lines.push(`... and ${entries.length - 200} more`);
+      return lines.join('\n') || '(empty directory)';
+    }
+    case 'search_files': {
+      const pattern = input.pattern as string;
+      const p = (input.path as string) || '.';
+      const abs = p.startsWith('/') ? p : join(projectRoot, p);
+      const include = input.include ? `--include="${input.include}"` : '';
+      try {
+        const { stdout } = await execAsync(
+          `grep -rn ${include} -- "${pattern}" "${abs}" 2>/dev/null | head -100`,
+          { timeout: 15000, maxBuffer: 1024 * 1024 },
+        );
+        return stdout.trim() || 'No matches found';
+      } catch { return 'No matches found'; }
+    }
+    default: return `Unknown tool: ${name}`;
+  }
+}
+
+// Claude streaming with tool_use support
+async function streamClaudeWithTools(
+  apiKey: string, systemPrompt: string,
+  messages: Array<{ role: string; content: string | Array<Record<string, unknown>> }>,
+  onTextChunk: (t: string) => void,
+): Promise<{ text: string; toolCalls: ToolCall[]; stopReason: string }> {
+  const reqBody = {
+    model: 'claude-sonnet-4-6', max_tokens: 8192, system: systemPrompt,
+    tools: AGENT_TOOLS, stream: true, messages,
+  };
+  console.log(`[MegaSloth Claude] Sending request: model=${reqBody.model}, tools=${reqBody.tools.length}, msgs=${reqBody.messages.length}`);
+  console.log(`[MegaSloth Claude] Tool names: ${reqBody.tools.map(t => t.name).join(', ')}`);
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
-      messages: messages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
-    }),
-    signal: AbortSignal.timeout(120000),
+    body: JSON.stringify(reqBody),
+    signal: AbortSignal.timeout(180000),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
-    throw new Error(err?.error?.message || `Claude API error: ${res.status}`);
+    const e = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(e?.error?.message || `Claude API error ${res.status}`);
   }
-  const data = await res.json() as { content: Array<{ text: string }> };
-  return data.content?.map(c => c.text).join('') || '';
+  let fullText = '';
+  const toolCalls: ToolCall[] = [];
+  let curTool: Partial<ToolCall> | null = null;
+  let curInput = '';
+  let stopReason = 'end_turn';
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop() || '';
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const d = line.slice(6);
+      if (d === '[DONE]') continue;
+      try {
+        const e = JSON.parse(d);
+        if (e.type === 'content_block_start' && e.content_block?.type === 'tool_use') {
+          curTool = { id: e.content_block.id, name: e.content_block.name };
+          curInput = '';
+        } else if (e.type === 'content_block_delta') {
+          if (e.delta?.type === 'text_delta' && e.delta.text) {
+            fullText += e.delta.text; onTextChunk(e.delta.text);
+          } else if (e.delta?.type === 'input_json_delta' && e.delta.partial_json) {
+            curInput += e.delta.partial_json;
+          }
+        } else if (e.type === 'content_block_stop' && curTool) {
+          try { curTool.input = JSON.parse(curInput); } catch { curTool.input = {}; }
+          toolCalls.push(curTool as ToolCall);
+          curTool = null; curInput = '';
+        } else if (e.type === 'message_delta' && e.delta?.stop_reason) {
+          stopReason = e.delta.stop_reason;
+        }
+      } catch {}
+    }
+  }
+  return { text: fullText, toolCalls, stopReason };
 }
 
-async function callOpenAI(apiKey: string, messages: ChatMsg[]): Promise<string> {
-  const input = messages.map(m => ({ role: m.role as string, content: m.content }));
-  const res = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: 'gpt-5.2',
-      input,
-      reasoning: { effort: 'medium' },
-    }),
-    signal: AbortSignal.timeout(120000),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
-    throw new Error(err?.error?.message || `OpenAI API error: ${res.status}`);
+// OpenAI streaming with function calling (Chat Completions API)
+async function streamOpenAIWithTools(
+  apiKey: string, systemPrompt: string,
+  messages: Array<{ role: string; content: string | Array<Record<string, unknown>> }>,
+  onTextChunk: (t: string) => void,
+): Promise<{ text: string; toolCalls: ToolCall[]; hasToolCalls: boolean }> {
+  const oaiMsgs: Array<Record<string, unknown>> = [{ role: 'system', content: systemPrompt }];
+  for (const m of messages) {
+    if (typeof m.content === 'string') {
+      oaiMsgs.push({ role: m.role, content: m.content });
+    } else if (Array.isArray(m.content)) {
+      if (m.role === 'user') {
+        for (const block of m.content) {
+          const b = block as Record<string, unknown>;
+          if (b.type === 'tool_result') {
+            oaiMsgs.push({ role: 'tool', tool_call_id: b.tool_use_id, content: String(b.content) });
+          }
+        }
+      } else if (m.role === 'assistant') {
+        const arr = m.content as Array<Record<string, unknown>>;
+        const texts = arr.filter(c => c.type === 'text').map(c => String(c.text)).join('');
+        const tcs = arr.filter(c => c.type === 'tool_use');
+        oaiMsgs.push({
+          role: 'assistant', content: texts || null,
+          ...(tcs.length ? { tool_calls: tcs.map(tc => ({
+            id: tc.id, type: 'function',
+            function: { name: tc.name, arguments: JSON.stringify(tc.input) },
+          })) } : {}),
+        });
+      }
+    }
   }
-  const data = await res.json() as { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }> };
-  return data.output_text || data.output?.flatMap(o => o.content?.map(c => c.text) || []).join('') || '';
-}
-
-async function callGemini(apiKey: string, messages: ChatMsg[]): Promise<string> {
-  const contents = messages.map(m => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }],
+  const oaiTools = AGENT_TOOLS.map(t => ({
+    type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema },
   }));
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents }),
-    signal: AbortSignal.timeout(120000),
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: 'gpt-4o', max_tokens: 8192, tools: oaiTools, stream: true, messages: oaiMsgs }),
+    signal: AbortSignal.timeout(180000),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
-    throw new Error(err?.error?.message || `Gemini API error: ${res.status}`);
+    const e = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(e?.error?.message || `OpenAI API error ${res.status}`);
   }
-  const data = await res.json() as { candidates: Array<{ content: { parts: Array<{ text: string }> } }> };
-  return data.candidates?.[0]?.content?.parts?.map(p => p.text).join('') || '';
+  let fullText = '';
+  const tcAcc = new Map<number, { id: string; name: string; args: string }>();
+  let hasToolCalls = false;
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop() || '';
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const d = line.slice(6);
+      if (d === '[DONE]') continue;
+      try {
+        const e = JSON.parse(d);
+        const delta = e.choices?.[0]?.delta;
+        if (delta?.content) { fullText += delta.content; onTextChunk(delta.content); }
+        if (delta?.tool_calls) {
+          hasToolCalls = true;
+          for (const tc of delta.tool_calls as Array<Record<string, unknown>>) {
+            const idx = tc.index as number;
+            if (!tcAcc.has(idx)) tcAcc.set(idx, { id: '', name: '', args: '' });
+            const acc = tcAcc.get(idx)!;
+            if (tc.id) acc.id = tc.id as string;
+            const fn = tc.function as Record<string, string> | undefined;
+            if (fn?.name) acc.name = fn.name;
+            if (fn?.arguments) acc.args += fn.arguments;
+          }
+        }
+        if (e.choices?.[0]?.finish_reason === 'tool_calls') hasToolCalls = true;
+      } catch {}
+    }
+  }
+  const toolCalls: ToolCall[] = [];
+  for (const [, acc] of tcAcc) {
+    try { toolCalls.push({ id: acc.id, name: acc.name, input: JSON.parse(acc.args) }); }
+    catch { toolCalls.push({ id: acc.id, name: acc.name, input: {} }); }
+  }
+  return { text: fullText, toolCalls, hasToolCalls: hasToolCalls || toolCalls.length > 0 };
 }
 
-ipcMain.handle('chat', async (_, message: string) => {
+// Gemini basic streaming (tool support can be added later)
+async function streamGeminiBasic(
+  apiKey: string,
+  messages: Array<{ role: string; content: string | Array<Record<string, unknown>> }>,
+  onChunk: (t: string) => void,
+): Promise<string> {
+  const contents = messages
+    .filter(m => typeof m.content === 'string')
+    .map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content as string }] }));
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents, systemInstruction: { parts: [{ text: buildSystemPrompt() }] } }),
+      signal: AbortSignal.timeout(180000) },
+  );
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(e?.error?.message || `Gemini API error ${res.status}`);
+  }
+  let full = '';
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop() || '';
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      try {
+        const e = JSON.parse(line.slice(6));
+        const t = e.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (t) { full += t; onChunk(t); }
+      } catch {}
+    }
+  }
+  return full;
+}
+
+// Agent loop: LLM call → tool execution → repeat until done
+async function runAgentLoop(
+  provider: string, apiKey: string, history: ChatMsg[],
+  onTextChunk: (t: string) => void,
+  onToolStatus: (s: { tool: string; args: string; output?: string; state: 'running' | 'done' | 'error' }) => void,
+): Promise<string> {
+  const systemPrompt = buildSystemPrompt();
+  const maxTurns = 15;
+
+  const apiMsgs: Array<{ role: string; content: string | Array<Record<string, unknown>> }> = [];
+  for (const m of history) {
+    if (m.role === 'system') continue;
+    apiMsgs.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content });
+  }
+
+  console.log(`[MegaSloth Agent] provider=${provider}, messages=${apiMsgs.length}, tools=${AGENT_TOOLS.length}`);
+
+  let turns = 0;
+  let fullText = '';
+
+  while (turns < maxTurns) {
+    turns++;
+
+    if (provider === 'claude') {
+      const { text, toolCalls, stopReason } = await streamClaudeWithTools(apiKey, systemPrompt, apiMsgs, onTextChunk);
+      console.log(`[MegaSloth Agent] turn=${turns}, stopReason=${stopReason}, toolCalls=${toolCalls.length}, textLen=${text.length}`);
+      fullText += text;
+      if (stopReason !== 'tool_use' || !toolCalls.length) break;
+
+      const aContent: Array<Record<string, unknown>> = [];
+      if (text) aContent.push({ type: 'text', text });
+      for (const tc of toolCalls) aContent.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.input });
+      apiMsgs.push({ role: 'assistant', content: aContent });
+
+      const tResults: Array<Record<string, unknown>> = [];
+      for (const tc of toolCalls) {
+        const args = Object.entries(tc.input).map(([k, v]) => `${k}: ${String(v).slice(0, 120)}`).join(', ');
+        onToolStatus({ tool: tc.name, args, state: 'running' });
+        try {
+          const out = await executeTool(tc.name, tc.input);
+          const trunc = out.length > 50000 ? out.slice(0, 50000) + '\n...(truncated)' : out;
+          tResults.push({ type: 'tool_result', tool_use_id: tc.id, content: trunc });
+          onToolStatus({ tool: tc.name, args, output: trunc.slice(0, 500), state: 'done' });
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : 'Tool failed';
+          tResults.push({ type: 'tool_result', tool_use_id: tc.id, content: `Error: ${msg}`, is_error: true });
+          onToolStatus({ tool: tc.name, args, output: msg, state: 'error' });
+        }
+      }
+      apiMsgs.push({ role: 'user', content: tResults });
+
+    } else if (provider === 'openai') {
+      const { text, toolCalls, hasToolCalls } = await streamOpenAIWithTools(apiKey, systemPrompt, apiMsgs, onTextChunk);
+      fullText += text;
+      if (!hasToolCalls || !toolCalls.length) break;
+
+      const aContent: Array<Record<string, unknown>> = [];
+      if (text) aContent.push({ type: 'text', text });
+      for (const tc of toolCalls) aContent.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.input });
+      apiMsgs.push({ role: 'assistant', content: aContent });
+
+      const tResults: Array<Record<string, unknown>> = [];
+      for (const tc of toolCalls) {
+        const args = Object.entries(tc.input).map(([k, v]) => `${k}: ${String(v).slice(0, 120)}`).join(', ');
+        onToolStatus({ tool: tc.name, args, state: 'running' });
+        try {
+          const out = await executeTool(tc.name, tc.input);
+          const trunc = out.length > 50000 ? out.slice(0, 50000) + '\n...(truncated)' : out;
+          tResults.push({ type: 'tool_result', tool_use_id: tc.id, content: trunc });
+          onToolStatus({ tool: tc.name, args, output: trunc.slice(0, 500), state: 'done' });
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : 'Tool failed';
+          tResults.push({ type: 'tool_result', tool_use_id: tc.id, content: `Error: ${msg}`, is_error: true });
+          onToolStatus({ tool: tc.name, args, output: msg, state: 'error' });
+        }
+      }
+      apiMsgs.push({ role: 'user', content: tResults });
+
+    } else {
+      fullText = await streamGeminiBasic(apiKey, apiMsgs, onTextChunk);
+      break;
+    }
+  }
+
+  return fullText;
+}
+
+let chatHistory: ChatMsg[] = loadChatHistory();
+
+ipcMain.handle('chat-stream', async (_, message: string) => {
   const env = parseEnvFile();
   const resolved = resolveApiKey(env);
-  if (!resolved) {
-    return { error: 'No API key configured. Go to Settings to add one.' };
+  if (!resolved) return { error: 'No API key configured. Go to Settings to add one.' };
+
+  chatHistory.push({ role: 'user', content: message, timestamp: Date.now() });
+
+  if (historyTokens(chatHistory) > SUMMARY_THRESHOLD) {
+    chatHistory = await summarizeHistory(chatHistory, resolved.provider, resolved.apiKey);
   }
 
-  chatHistory.push({ role: 'user', content: message });
+  const graphCtx = await retrieveGraphContext(message, env);
+  if (graphCtx) {
+    chatHistory = [
+      { role: 'system', content: graphCtx, timestamp: Date.now() },
+      ...chatHistory.filter(m => !(m.role === 'system' && m.content.startsWith('<memory>'))),
+    ];
+  }
 
   try {
-    let response = '';
-    switch (resolved.provider) {
-      case 'claude':
-        response = await callClaude(resolved.apiKey, chatHistory);
-        break;
-      case 'openai':
-        response = await callOpenAI(resolved.apiKey, chatHistory);
-        break;
-      case 'gemini':
-        response = await callGemini(resolved.apiKey, chatHistory);
-        break;
-      default:
-        return { error: `Unknown provider: ${resolved.provider}` };
-    }
-    chatHistory.push({ role: 'assistant', content: response });
-    return { response, provider: resolved.provider };
+    const onChunk = (t: string) => mainWindow?.webContents.send('chat-chunk', t);
+    const onTool = (s: { tool: string; args: string; output?: string; state: string }) =>
+      mainWindow?.webContents.send('chat-tool-status', s);
+
+    const fullResponse = await runAgentLoop(resolved.provider, resolved.apiKey, chatHistory, onChunk, onTool);
+
+    chatHistory.push({ role: 'assistant', content: fullResponse, timestamp: Date.now() });
+    saveChatHistory(chatHistory);
+    mainWindow?.webContents.send('chat-done', { provider: resolved.provider });
+
+    extractAndUpdateGraph(message, fullResponse, env).catch(() => {});
+    return { ok: true };
   } catch (e) {
     chatHistory.pop();
+    saveChatHistory(chatHistory);
     const msg = e instanceof Error ? e.message : 'Unknown error';
+    mainWindow?.webContents.send('chat-error', msg);
     return { error: msg };
   }
 });
 
+ipcMain.handle('load-chat-history', () => chatHistory.filter(m => m.role !== 'system'));
+
 ipcMain.handle('clear-chat', () => {
-  chatHistory.length = 0;
+  chatHistory = [];
+  saveChatHistory([]);
   return true;
 });
 

@@ -25,7 +25,29 @@ contextBridge.exposeInMainWorld('megasloth', {
   getTheme: () => ipcRenderer.invoke('get-theme'),
   setTheme: (theme: string) => ipcRenderer.invoke('set-theme', theme),
   fetchRepositories: () => ipcRenderer.invoke('fetch-repositories'),
-  chat: (message: string) => ipcRenderer.invoke('chat', message),
+
+  chatStream: (message: string) => ipcRenderer.invoke('chat-stream', message),
+  loadChatHistory: () => ipcRenderer.invoke('load-chat-history'),
   clearChat: () => ipcRenderer.invoke('clear-chat'),
   getChatStatus: () => ipcRenderer.invoke('get-chat-status'),
+  onChatChunk: (cb: (chunk: string) => void) => {
+    const handler = (_: unknown, chunk: string) => cb(chunk);
+    ipcRenderer.on('chat-chunk', handler);
+    return () => ipcRenderer.removeListener('chat-chunk', handler);
+  },
+  onChatDone: (cb: (data: { provider: string }) => void) => {
+    const handler = (_: unknown, data: { provider: string }) => cb(data);
+    ipcRenderer.on('chat-done', handler);
+    return () => ipcRenderer.removeListener('chat-done', handler);
+  },
+  onChatError: (cb: (error: string) => void) => {
+    const handler = (_: unknown, error: string) => cb(error);
+    ipcRenderer.on('chat-error', handler);
+    return () => ipcRenderer.removeListener('chat-error', handler);
+  },
+  onChatToolStatus: (cb: (status: { tool: string; args: string; output?: string; state: string }) => void) => {
+    const handler = (_: unknown, status: { tool: string; args: string; output?: string; state: string }) => cb(status);
+    ipcRenderer.on('chat-tool-status', handler);
+    return () => ipcRenderer.removeListener('chat-tool-status', handler);
+  },
 });
