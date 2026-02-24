@@ -443,6 +443,28 @@ export class GitHubAdapter implements GitProviderAdapter {
     };
   }
 
+  async closeIssue(owner: string, repo: string, number: number): Promise<GitIssue> {
+    const { data } = await this.octokit.rest.issues.update({
+      owner,
+      repo,
+      issue_number: number,
+      state: 'closed',
+    });
+    return {
+      id: String(data.id),
+      number: data.number,
+      title: data.title,
+      body: data.body || undefined,
+      state: data.state as 'open' | 'closed',
+      labels: data.labels.map(l => typeof l === 'string' ? l : l.name || ''),
+      assignees: data.assignees?.map(a => ({ id: String(a.id), username: a.login })) || [],
+      author: { id: String(data.user?.id || ''), username: data.user?.login || '' },
+      url: data.html_url,
+      createdAt: new Date(data.created_at),
+      updatedAt: new Date(data.updated_at),
+    };
+  }
+
   async addIssueComment(owner: string, repo: string, number: number, body: string): Promise<GitComment> {
     const { data } = await this.octokit.rest.issues.createComment({
       owner,
@@ -759,7 +781,8 @@ export class GitHubAdapter implements GitProviderAdapter {
       const { data: keyData } = await this.octokit.rest.actions.getEnvironmentPublicKey({
         owner, repo, environment_name: envName,
       });
-      const sodium = await import('tweetsodium').catch(() => null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sodium = await import('tweetsodium' as any).catch(() => null) as any;
       if (!sodium) throw new Error('tweetsodium required for secrets; set isSecret=false for plain variables');
       const encrypted = sodium.seal(Buffer.from(value), Buffer.from(keyData.key, 'base64'));
       await this.octokit.rest.actions.createOrUpdateEnvironmentSecret({
@@ -795,7 +818,8 @@ export class GitHubAdapter implements GitProviderAdapter {
   async setRepositoryVariable(owner: string, repo: string, name: string, value: string, isSecret = false): Promise<void> {
     if (isSecret) {
       const { data: keyData } = await this.octokit.rest.actions.getRepoPublicKey({ owner, repo });
-      const sodium = await import('tweetsodium').catch(() => null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sodium = await import('tweetsodium' as any).catch(() => null) as any;
       if (!sodium) throw new Error('tweetsodium required for secrets');
       const encrypted = sodium.seal(Buffer.from(value), Buffer.from(keyData.key, 'base64'));
       await this.octokit.rest.actions.createOrUpdateRepoSecret({

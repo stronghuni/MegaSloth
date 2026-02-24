@@ -6,6 +6,7 @@ export class CacheStore {
   private redis: Redis.default;
   private logger = getLogger('cache-store');
   private prefix = 'megasloth:';
+  private lastErrorLog = 0;
 
   constructor(config: RedisConfig) {
     this.redis = new Redis.default(config.url, {
@@ -14,7 +15,7 @@ export class CacheStore {
         if (times > 10) {
           return null;
         }
-        return Math.min(times * 100, 3000);
+        return Math.min(times * 200, 10_000);
       },
     });
 
@@ -23,7 +24,11 @@ export class CacheStore {
     });
 
     this.redis.on('error', (error: Error) => {
-      this.logger.error({ error }, 'Redis error');
+      const now = Date.now();
+      if (now - this.lastErrorLog > 30_000) {
+        this.lastErrorLog = now;
+        this.logger.error({ error }, 'Redis connection failed — retrying in background');
+      }
     });
   }
 

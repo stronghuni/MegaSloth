@@ -3,7 +3,7 @@ import { Command } from 'commander';
 export const startCommand = new Command('start')
   .description('Start the MegaSloth agent')
   .option('-d, --daemon', 'Run as background daemon')
-  .action(async (options) => {
+  .action(async (_options: { daemon?: boolean }) => {
     console.log('\n  🦥 Starting MegaSloth...\n');
 
     try {

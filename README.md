@@ -5,8 +5,8 @@
 <h1 align="center">MegaSloth</h1>
 
 <p align="center">
-  <strong>AI-Powered Repository Operations Agent</strong><br/>
-  Automates GitHub, GitLab & Bitbucket workflows with full CI/CD control
+  <strong>Full Automation Agent — One API Key, Total Control</strong><br/>
+  Shell, Browser, Filesystem, Web, Git, CI/CD, Credentials — all automated by AI
 </p>
 
 <p align="center">
@@ -91,19 +91,45 @@ MegaSloth is a **self-hosted AI agent** that monitors your Git repositories 24/7
 ### Multi-Model LLM Support
 Choose your preferred AI provider — **bring your own API key**:
 
-| Provider | Models | Status |
-|----------|--------|--------|
-| **Anthropic Claude** | claude-sonnet-4, claude-opus-4 | Supported |
-| **OpenAI** | gpt-4o, o3, o4-mini | Supported |
-| **Google Gemini** | gemini-2.5-pro, gemini-2.5-flash | Supported |
+| Provider | Default Model | Status |
+|----------|---------------|--------|
+| **Anthropic Claude** | claude-sonnet-4-6 | Supported |
+| **OpenAI** | gpt-5.2 | Supported |
+| **Google Gemini** | gemini-3.1-pro-preview | Supported |
 
-### Full CI/CD Control
-MegaSloth doesn't just monitor — it has **full control**:
-- Create, modify, delete workflow/pipeline files
-- Trigger, retry, cancel workflow runs
-- Manage environment variables and secrets
-- Create deployments and track status
-- Diagnose failures and auto-create fix PRs
+### 84 Built-in Tools (9 Categories)
+
+MegaSloth is a **full automation agent** with tools spanning every layer of your system:
+
+| Category | Tools | Description |
+|----------|-------|-------------|
+| **Shell** (6) | `shell_exec`, `shell_background`, `process_list/poll/kill/write` | Execute commands, manage background processes |
+| **Filesystem** (7) | `fs_read/write/edit/list/delete/search/info` | Full local file access with edit-in-place |
+| **Web** (3) | `web_search`, `web_fetch`, `web_screenshot` | DuckDuckGo search, readable page extraction, screenshots |
+| **Browser** (10) | `browser_launch/navigate/click/type/screenshot/snapshot/scroll/evaluate/wait/tabs` | Playwright-based full browser automation |
+| **System** (5) | `system_screenshot`, `clipboard_read/write`, `notify`, `open` | OS-level control (macOS/Linux) |
+| **Git/CI/CD** (30+) | PRs, issues, branches, workflows, deployments, releases, env vars, secrets | Full GitHub/GitLab/Bitbucket control |
+| **Credential** (4) | `credential_provision/list/store/delete` | Auto-provisioning via OAuth Device Flow + encrypted vault |
+| **Memory** (4) | `memory_store/search/list/delete` | Persistent context across sessions |
+| **Session** (3) | `session_spawn/list/send` | Multi-agent background task management |
+
+### Auto-Credential Provisioning
+
+MegaSloth automatically obtains and manages API tokens:
+
+- **GitHub** — gh CLI detection → OAuth Device Flow → manual fallback
+- **GitLab** — glab CLI detection → manual fallback
+- **AWS** — aws CLI detection → SSO login guide
+- **GCP** — gcloud CLI detection → auth guide
+- All credentials encrypted with **AES-256-GCM** in a local vault
+
+### Security Profiles
+
+| Profile | Description | Tools Enabled |
+|---------|-------------|---------------|
+| **Restricted** | Git operations only | Git, PR, CI, Issue, Code, Memory |
+| **Standard** | Full dev workflow | + Shell, Filesystem, Web, Credentials |
+| **Full** | Complete automation | + Browser, System (all 84 tools) |
 
 ### 8 Built-in Skills
 
@@ -152,8 +178,10 @@ The wizard will ask you for:
 |----------|---------------|-----------------|
 | AI Provider | Choose 1, 2, or 3 | Your preference |
 | API Key | Your AI provider's key | See [Getting API Keys](#getting-api-keys) below |
-| GitHub Token | Your GitHub token | See [Getting API Keys](#getting-api-keys) below |
-| Webhook Secret | Press Enter to auto-generate | Auto-generated |
+| Security Profile | Standard (recommended) | Choose based on your needs |
+| GitHub Token | Auto-detected or enter manually | Auto via `gh` CLI or [Getting API Keys](#getting-api-keys) |
+
+> **Only the LLM API key is required.** GitHub tokens and other credentials are auto-provisioned on demand.
 
 **Step 4:** Start MegaSloth
 
@@ -645,85 +673,42 @@ MegaSloth's AI agent has access to **40+ tools** organized by category:
 ## 🏗 Architecture
 
 ```
-                    Webhooks (GitHub/GitLab/Bitbucket)
-                              │
-                    ┌───────────────────┐
-                    │  Webhook Server   │  :3001
-                    └───────────────────┘
-                              │
-                    ┌───────────────────┐
-                    │    Job Queue      │  BullMQ + Redis
-                    │    (Worker)       │
-                    └───────────────────┘
-                              │
-                    ┌───────────────────┐
-                    │   Skill Engine    │  Match events → skills
-                    └───────────────────┘
-                              │
-                    ┌───────────────────┐
-                    │   Agent Core      │  Multi-turn LLM loop
-                    │   + LLM Router    │  Claude / OpenAI / Gemini
-                    └───────────────────┘
-                         │         │
-              ┌──────────┘         └──────────┐
-              │  Tools (40+)       │  Memory   │
-              └──────────┐         └──────────┘
+     User Chat / Webhooks (GitHub/GitLab/Bitbucket)
                          │
-              ┌──────────┼──────────┐
-              │          │          │
-           GitHub     GitLab   Bitbucket
-```
-
----
-
-## 📁 Project Structure
-
-```
-megasloth/
-├── install.sh                    # One-line installer
-├── src/
-│   ├── index.ts                  # Main entry point
-│   ├── cli/                      # CLI commands
-│   │   ├── index.ts              #   CLI entry point
-│   │   └── commands/             #   init, start, stop, config, etc.
-│   ├── providers/                # LLM providers
-│   │   ├── types.ts              #   Provider interface
-│   │   ├── claude.provider.ts    #   Anthropic Claude
-│   │   ├── openai.provider.ts    #   OpenAI
-│   │   ├── gemini.provider.ts    #   Google Gemini
-│   │   └── factory.ts            #   Provider factory
-│   ├── agent/                    # AI agent
-│   │   ├── core.ts               #   Agent core (multi-turn)
-│   │   ├── context-manager.ts    #   Conversation history
-│   │   └── session.ts            #   Interactive sessions
-│   ├── adapters/
-│   │   ├── git/                  # Git platform adapters
-│   │   │   ├── types.ts          #   Shared interfaces
-│   │   │   ├── github.adapter.ts
-│   │   │   ├── gitlab.adapter.ts
-│   │   │   └── bitbucket.adapter.ts
-│   │   └── notifications/       # Notification adapters
-│   ├── gateway/                  # HTTP, Webhook, WebSocket
-│   ├── skills/                   # Skill engine
-│   │   ├── builtin/              #   Built-in skills
-│   │   │   ├── pr-review/        #     AI code review
-│   │   │   ├── ci-fix/           #     CI failure auto-fix
-│   │   │   └── issue-triage/     #     Issue triage
-│   │   ├── engine.ts             #   Skill executor
-│   │   ├── parser.ts             #   SKILL.md parser
-│   │   └── registry.ts           #   Skill registry
-│   ├── tools/                    # Tool registry (40+ tools)
-│   ├── queue/                    # BullMQ job queue
-│   ├── scheduler/                # Cron scheduler
-│   ├── storage/                  # SQLite + Drizzle ORM
-│   ├── memory/                   # Graph memory system
-│   └── plugins/                  # Plugin system
-├── .megasloth/
-│   ├── config.yaml               # Configuration
-│   └── skills/                   # Custom skills
-├── docker-compose.yml
-├── Dockerfile
-└── package.json
+              ┌──────────┴──────────┐
+              │  Gateway Layer      │  HTTP :13000 / Webhook :3001 / WebSocket
+              └──────────┬──────────┘
+                         │
+              ┌──────────┴──────────┐
+              │  Job Queue + Cron   │  BullMQ + Redis + Croner
+              └──────────┬──────────┘
+                         │
+              ┌──────────┴──────────┐
+              │   Skill Engine      │  Match events → skills
+              └──────────┬──────────┘
+                         │
+              ┌──────────┴──────────┐
+              │    Agent Core       │  Multi-turn LLM loop
+              │    + LLM Router     │  Claude / OpenAI / Gemini
+              └──────────┬──────────┘
+                         │
+         ┌───────────────┼───────────────┐
+         │               │               │
+  ┌──────┴──────┐ ┌──────┴──────┐ ┌──────┴──────┐
+  │ Git Tools   │ │ Local Tools │ │ Auto Creds  │
+  │ (30+ tools) │ │ (31 tools)  │ │ + Vault     │
+  │ GitHub      │ │ Shell       │ │ OAuth Flow  │
+  │ GitLab      │ │ Filesystem  │ │ CLI detect  │
+  │ Bitbucket   │ │ Web/Browser │ │ AES-256     │
+  │ CI/CD       │ │ System      │ │ Auto-renew  │
+  └─────────────┘ └─────────────┘ └─────────────┘
+         │               │               │
+         └───────────────┼───────────────┘
+                         │
+              ┌──────────┴──────────┐
+              │  Memory + Sessions  │  Persistent context + multi-agent
+              │  Security Layer     │  Profile-based access control
+              └─────────────────────┘
 ```
 
 ---

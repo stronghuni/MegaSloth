@@ -22,8 +22,8 @@ export class GeminiProvider implements LLMProvider {
 
   constructor(config: LLMProviderConfig) {
     this.client = new GoogleGenAI({ apiKey: config.apiKey });
-    this.model = config.model || DEFAULT_MODELS.gemini;
-    this.maxTokens = config.maxTokens || 4096;
+    this.model = config.model || DEFAULT_MODELS.gemini!;
+    this.maxTokens = config.maxTokens ?? 4096;
   }
 
   private convertToolsToDeclarations(tools?: ToolDefinition[]): GeminiTool[] | undefined {
@@ -32,7 +32,7 @@ export class GeminiProvider implements LLMProvider {
     const declarations: FunctionDeclaration[] = tools.map(tool => ({
       name: tool.name,
       description: tool.description,
-      parameters: tool.input_schema as FunctionDeclaration['parameters'],
+      parameters: tool.input_schema as unknown as FunctionDeclaration['parameters'],
     }));
 
     return [{ functionDeclarations: declarations }];

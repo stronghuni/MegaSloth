@@ -5,7 +5,7 @@ import { join } from 'node:path';
 export const initCommand = new Command('init')
   .description('Initialize MegaSloth in the current directory')
   .option('-p, --provider <provider>', 'LLM provider (claude|openai|gemini)', 'claude')
-  .action(async (options) => {
+  .action(async (options: { provider: string }) => {
     console.log('\n  🦥 MegaSloth - AI-Powered Repository Operations Agent\n');
 
     const configDir = '.megasloth';

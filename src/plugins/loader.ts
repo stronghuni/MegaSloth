@@ -73,12 +73,11 @@ export class PluginLoader {
   private async loadFromPackage(pluginPath: string, pkg: Record<string, unknown>): Promise<LoadedPlugin> {
     const megasloth = pkg.megasloth as PluginManifest;
     const manifest: PluginManifest = {
-      name: (pkg.name as string) || 'unknown',
-      version: (pkg.version as string) || '0.0.0',
-      description: (pkg.description as string) || '',
-      type: megasloth.type,
-      main: (pkg.main as string) || 'index.js',
       ...megasloth,
+      name: megasloth.name || (pkg.name as string) || 'unknown',
+      version: megasloth.version || (pkg.version as string) || '0.0.0',
+      description: megasloth.description || (pkg.description as string) || '',
+      main: megasloth.main || (pkg.main as string) || 'index.js',
     };
 
     return this.loadFromManifest(pluginPath, manifest);

@@ -34,6 +34,19 @@ export class WebhookServer {
       logger: false,
     });
 
+    this.server.addContentTypeParser(
+      'application/json',
+      { parseAs: 'buffer' },
+      (req, body, done) => {
+        (req as any).rawBody = body;
+        try {
+          done(null, JSON.parse(body.toString()));
+        } catch (err) {
+          done(err as Error, undefined);
+        }
+      },
+    );
+
     this.setupRoutes();
   }
 
@@ -113,11 +126,10 @@ export class WebhookServer {
         return reply.status(400).send({ error: 'Missing event header' });
       }
 
-      // Bitbucket uses HMAC-SHA256 for webhook signatures
       if (this.deps.bitbucketConfig.webhookSecret) {
         const signature = request.headers['x-hub-signature'] as string | undefined;
         if (signature) {
-          const rawBody = JSON.stringify(request.body);
+          const rawBody = ((request as any).rawBody as Buffer)?.toString() || JSON.stringify(request.body);
           if (!this.verifyBitbucketSignature(rawBody, signature, this.deps.bitbucketConfig.webhookSecret)) {
             return reply.status(401).send({ error: 'Invalid signature' });
           }

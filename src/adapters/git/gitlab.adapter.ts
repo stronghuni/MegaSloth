@@ -404,6 +404,25 @@ export class GitLabAdapter implements GitProviderAdapter {
     };
   }
 
+  async closeIssue(owner: string, repo: string, number: number): Promise<GitIssue> {
+    const closed = await this.api.Issues.edit(this.getProjectPath(owner, repo), number, {
+      stateEvent: 'close',
+    } as any);
+    return {
+      id: String(closed.id),
+      number: closed.iid,
+      title: String(closed.title || ''),
+      body: closed.description || undefined,
+      state: 'closed',
+      author: this.mapUser(closed.author),
+      labels: closed.labels || [],
+      assignees: (closed.assignees || []).map((a: any) => this.mapUser(a)),
+      url: String(closed.web_url || ''),
+      createdAt: new Date(closed.created_at || Date.now()),
+      updatedAt: new Date(closed.updated_at || Date.now()),
+    };
+  }
+
   async addIssueComment(owner: string, repo: string, number: number, body: string): Promise<GitComment> {
     const note = await this.api.IssueNotes.create(this.getProjectPath(owner, repo), number, body);
 

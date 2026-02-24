@@ -204,7 +204,7 @@ export class HttpServer {
           const content = readFileSync(skillFile, 'utf-8');
           const fm = content.match(/^---\n([\s\S]*?)\n---/);
           if (fm) {
-            const meta = parseYaml(fm[1]);
+            const meta = parseYaml(fm[1]!);
             skills.push({
               name: meta.name || entry,
               description: meta.description || '',

@@ -3,7 +3,7 @@
  * Inspired by Graphiti's automatic entity extraction
  */
 
-import { type ClaudeClient } from '../../agent/claude-client.js';
+import { type LLMProvider } from '../../providers/types.js';
 import { type EntityNode, type EntityType } from '../graph/nodes.js';
 import { type RelationType } from '../graph/edges.js';
 import { getLogger } from '../../utils/logger.js';
@@ -89,12 +89,10 @@ Text to analyze:
 `;
 
 export class EntityExtractor {
-  private claudeClient: ClaudeClient;
-  private model: string;
+  private llm: LLMProvider;
 
-  constructor(claudeClient: ClaudeClient, model: string = 'claude-3-haiku-20240307') {
-    this.claudeClient = claudeClient;
-    this.model = model;
+  constructor(llm: LLMProvider) {
+    this.llm = llm;
   }
 
   /**
@@ -106,14 +104,17 @@ export class EntityExtractor {
     }
 
     try {
-      const response = await this.claudeClient.chat(
+      const response = await this.llm.chat(
         [{ role: 'user', content: EXTRACTION_PROMPT + text }],
-        {
-          maxTokens: 2000,
-        }
+        { maxTokens: 2000 },
       );
 
-      const result = this.parseExtractionResponse(response.textContent);
+      const textContent = response.content
+        .filter(b => b.type === 'text')
+        .map(b => b.type === 'text' ? b.text : '')
+        .join('');
+
+      const result = this.parseExtractionResponse(textContent);
 
       logger.debug({
         textLength: text.length,

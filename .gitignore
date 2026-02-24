@@ -38,3 +38,6 @@ drizzle/
 *.tmp
 *.temp
 .claude/
+*.enc.json
+.megasloth/data/
+.megasloth/test-*

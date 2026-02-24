@@ -22,8 +22,8 @@ export class OpenAIProvider implements LLMProvider {
 
   constructor(config: LLMProviderConfig) {
     this.client = new OpenAI({ apiKey: config.apiKey });
-    this.model = config.model || DEFAULT_MODELS.openai;
-    this.maxTokens = config.maxTokens || 4096;
+    this.model = config.model || DEFAULT_MODELS.openai!;
+    this.maxTokens = config.maxTokens ?? 4096;
   }
 
   private convertToolsToFunctions(tools?: ToolDefinition[]): OpenAI.ChatCompletionTool[] | undefined {
@@ -123,21 +123,23 @@ export class OpenAIProvider implements LLMProvider {
 
     if (choice.message.tool_calls) {
       for (const tc of choice.message.tool_calls) {
+        if (tc.type !== 'function') continue;
+        const fn = (tc as { type: 'function'; id: string; function: { name: string; arguments: string } }).function;
         let parsedInput: Record<string, unknown> = {};
         try {
-          parsedInput = JSON.parse(tc.function.arguments);
+          parsedInput = JSON.parse(fn.arguments);
         } catch { /* empty */ }
 
         const toolUse: ToolUse = {
           id: tc.id,
-          name: tc.function.name,
+          name: fn.name,
           input: parsedInput,
         };
         toolUses.push(toolUse);
         content.push({
           type: 'tool_use',
           id: tc.id,
-          name: tc.function.name,
+          name: fn.name,
           input: parsedInput,
         });
       }

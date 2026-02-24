@@ -37,7 +37,7 @@ skillCommand
 
         if (frontmatter) {
           const { parse } = await import('yaml');
-          const meta = parse(frontmatter[1]);
+          const meta = parse(frontmatter[1]!);
           name = meta.name || entry;
           description = meta.description || '';
           enabled = meta.enabled !== false;

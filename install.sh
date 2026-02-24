@@ -52,7 +52,7 @@ error()   { echo -e "  ${RED}✗${NC} $1"; }
 step()    { echo -e "\n  ${MAGENTA}${BOLD}[$1/$TOTAL_STEPS]${NC} ${WHITE}$2${NC}\n"; }
 ask()     { echo -ne "  ${CYAN}?${NC} $1"; }
 
-TOTAL_STEPS=6
+TOTAL_STEPS=7
 
 # ─────────────────────────────────────────────────────
 # OS Detection
@@ -219,23 +219,55 @@ run_setup_wizard() {
     warn "No API key provided — you can set it later in .env"
   fi
 
-  # GitHub Token
+  # Security Profile
   echo ""
-  echo -e "  ${WHITE}Git Platform Setup ${DIM}(optional — can be configured later)${NC}"
+  echo -e "  ${WHITE}Security Profile:${NC}"
+  echo -e "  ${DIM}  1) Standard — shell, filesystem, web, credentials (recommended)${NC}"
+  echo -e "  ${DIM}  2) Full     — all tools including browser automation & system control${NC}"
+  echo -e "  ${DIM}  3) Restricted — Git operations only, no local access${NC}"
   echo ""
-  ask "GitHub Personal Access Token (ghp_...): "
-  read -rs github_token; echo ""
+  ask "Choose [1/2/3] (default: 1): "
+  read -r sec_choice
+  echo ""
 
-  if [ -n "${github_token:-}" ]; then
-    success "GitHub Token: ****${github_token: -4}"
+  case "$sec_choice" in
+    2) SECURITY_PROFILE="full" ;;
+    3) SECURITY_PROFILE="restricted" ;;
+    *) SECURITY_PROFILE="standard" ;;
+  esac
+  success "Security: ${BOLD}$SECURITY_PROFILE${NC}"
+
+  # Auto-detect GitHub token
+  github_token=""
+  if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
+    github_token=$(gh auth token 2>/dev/null || true)
+    if [ -n "${github_token:-}" ]; then
+      success "GitHub Token: auto-detected from gh CLI"
+    fi
   fi
 
-  ask "GitHub Webhook Secret (press Enter to auto-generate): "
-  read -r webhook_secret
-  if [ -z "${webhook_secret:-}" ]; then
-    webhook_secret=$(openssl rand -hex 20 2>/dev/null || head -c 40 /dev/urandom | od -A n -t x1 | tr -d ' \n')
-    success "Webhook Secret: auto-generated"
+  if [ -z "${github_token:-}" ]; then
+    echo ""
+    echo -e "  ${DIM}GitHub token not found. MegaSloth can auto-provision later via OAuth.${NC}"
+    ask "GitHub Personal Access Token (ghp_..., or Enter to skip): "
+    read -rs github_token; echo ""
+    if [ -n "${github_token:-}" ]; then
+      success "GitHub Token: ****${github_token: -4}"
+    else
+      info "Will auto-provision GitHub token on first use (OAuth Device Flow)"
+    fi
   fi
+
+  webhook_secret=$(openssl rand -hex 20 2>/dev/null || head -c 40 /dev/urandom | od -A n -t x1 | tr -d ' \n')
+  success "Webhook Secret: auto-generated"
+
+  # Assign API keys based on provider
+  local anthropic_key="" openai_key="" gemini_key=""
+  case "$LLM_PROVIDER" in
+    claude)  anthropic_key="${api_key:-}" ;;
+    openai)  openai_key="${api_key:-}" ;;
+    gemini)  gemini_key="${api_key:-}" ;;
+  esac
 
   # Write .env
   cat > "$MEGASLOTH_DIR/.env" <<ENVEOF
@@ -248,9 +280,9 @@ run_setup_wizard() {
 LLM_PROVIDER=${LLM_PROVIDER}
 
 # API Keys (set the one matching your provider)
-ANTHROPIC_API_KEY=${LLM_PROVIDER == "claude" && api_key:-}
-OPENAI_API_KEY=${LLM_PROVIDER == "openai" && api_key:-}
-GEMINI_API_KEY=${LLM_PROVIDER == "gemini" && api_key:-}
+ANTHROPIC_API_KEY=${anthropic_key}
+OPENAI_API_KEY=${openai_key}
+GEMINI_API_KEY=${gemini_key}
 
 # GitHub
 GITHUB_TOKEN=${github_token:-}
@@ -266,6 +298,9 @@ REDIS_URL=redis://localhost:6379
 
 # Database
 DATABASE_URL=${MEGASLOTH_DIR}/.megasloth/data/megasloth.db
+
+# Security Profile: restricted | standard | full
+SECURITY_PROFILE=${SECURITY_PROFILE}
 
 # Logging
 LOG_LEVEL=info
@@ -583,6 +618,46 @@ WRAPPER
       echo -e "    ${DIM}source $SHELL_RC${NC}"
     fi
   fi
+
+  # ── Step 7: Auto-Provision Credentials ──
+  step 7 "Auto-provisioning credentials"
+
+  if [ -n "${github_token:-}" ]; then
+    success "GitHub: already configured"
+  else
+    if command -v gh &>/dev/null; then
+      info "Attempting GitHub login via gh CLI..."
+      if gh auth login --web 2>/dev/null; then
+        github_token=$(gh auth token 2>/dev/null || true)
+        if [ -n "${github_token:-}" ]; then
+          # Update .env with new token
+          if [ "$(uname -s)" = "Darwin" ]; then
+            sed -i '' "s|^GITHUB_TOKEN=.*|GITHUB_TOKEN=${github_token}|" "$MEGASLOTH_DIR/.env"
+          else
+            sed -i "s|^GITHUB_TOKEN=.*|GITHUB_TOKEN=${github_token}|" "$MEGASLOTH_DIR/.env"
+          fi
+          success "GitHub: token provisioned via gh CLI"
+        fi
+      else
+        info "GitHub: will auto-provision on first use via OAuth Device Flow"
+      fi
+    else
+      info "GitHub: install 'gh' CLI for easy auth, or set GITHUB_TOKEN in .env"
+    fi
+  fi
+
+  # Check other CLIs
+  if command -v glab &>/dev/null && glab auth status &>/dev/null 2>&1; then
+    success "GitLab: CLI detected and authenticated"
+  fi
+  if command -v aws &>/dev/null && aws sts get-caller-identity &>/dev/null 2>&1; then
+    success "AWS: CLI configured"
+  fi
+  if command -v gcloud &>/dev/null && gcloud auth print-access-token &>/dev/null 2>&1; then
+    success "GCP: CLI configured"
+  fi
+
+  info "All missing credentials will be auto-provisioned on demand"
 
   # ── Done! ──
   echo ""

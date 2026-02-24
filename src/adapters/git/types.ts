@@ -246,6 +246,7 @@ export interface GitProviderAdapter {
   getIssue(owner: string, repo: string, number: number): Promise<GitIssue>;
   createIssue(owner: string, repo: string, issue: CreateIssueInput): Promise<GitIssue>;
   updateIssue(owner: string, repo: string, number: number, update: Partial<CreateIssueInput>): Promise<GitIssue>;
+  closeIssue(owner: string, repo: string, number: number): Promise<GitIssue>;
   addIssueComment(owner: string, repo: string, number: number, body: string): Promise<GitComment>;
 
   // CI/CD operations

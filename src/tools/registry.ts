@@ -9,12 +9,16 @@ export interface ToolContext {
   prNumber?: number;
 }
 
+export type ToolCategory =
+  | 'git' | 'pr' | 'ci' | 'issue' | 'code' | 'release' | 'deploy' | 'env'
+  | 'shell' | 'filesystem' | 'web' | 'browser' | 'system' | 'credential' | 'memory' | 'session';
+
 export type ToolHandler = (input: Record<string, unknown>, context: ToolContext) => Promise<string>;
 
 export interface RegisteredTool {
   definition: ToolDefinition;
   handler: ToolHandler;
-  category: 'git' | 'pr' | 'ci' | 'issue' | 'code' | 'release' | 'deploy' | 'env';
+  category: ToolCategory;
 }
 
 export class ToolRegistry {
@@ -74,9 +78,35 @@ export class ToolRegistry {
   }
 }
 
+// Lazy imports for modular tool registration (no circular deps)
+async function registerExtendedTools(registry: ToolRegistry): Promise<void> {
+  const { registerShellTools } = await import('./shell.tools.js');
+  const { registerFilesystemTools } = await import('./filesystem.tools.js');
+  const { registerWebTools } = await import('./web.tools.js');
+  const { registerBrowserTools } = await import('./browser.tools.js');
+  const { registerSystemTools } = await import('./system.tools.js');
+  const { registerCredentialTools } = await import('./credential.tools.js');
+  const { registerMemoryTools } = await import('./memory.tools.js');
+  const { registerSessionTools } = await import('./session.tools.js');
+
+  registerShellTools(registry);
+  registerFilesystemTools(registry);
+  registerWebTools(registry);
+  registerBrowserTools(registry);
+  registerSystemTools(registry);
+  registerCredentialTools(registry);
+  registerMemoryTools(registry);
+  registerSessionTools(registry);
+}
+
 // Create and populate the default registry
 export function createDefaultToolRegistry(): ToolRegistry {
   const registry = new ToolRegistry();
+
+  // Register extended tool modules (async, non-blocking)
+  registerExtendedTools(registry).catch((err) => {
+    getLogger('tool-registry').warn({ err }, 'Failed to register extended tools');
+  });
 
   // Git tools
   registry.register({
@@ -707,7 +737,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
   registry.register({
     category: 'issue',
     definition: { name: 'close_issue', description: 'Close an issue', input_schema: { type: 'object', properties: { issue_number: { type: 'number', description: 'Issue number' } }, required: ['issue_number'] } },
-    handler: async (input, ctx) => { await ctx.gitAdapter.updateIssue(ctx.owner, ctx.repo, input.issue_number as number, { title: undefined }); return `Issue #${input.issue_number} closed`; },
+    handler: async (input, ctx) => { await ctx.gitAdapter.closeIssue(ctx.owner, ctx.repo, input.issue_number as number); return `Issue #${input.issue_number} closed`; },
   });
 
   return registry;

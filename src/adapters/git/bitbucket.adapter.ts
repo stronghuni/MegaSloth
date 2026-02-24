@@ -488,6 +488,28 @@ export class BitbucketAdapter implements GitProviderAdapter {
     };
   }
 
+  async closeIssue(owner: string, repo: string, number: number): Promise<GitIssue> {
+    const { data } = await this.api.repositories.updateIssue({
+      workspace: owner,
+      repo_slug: repo,
+      issue_id: String(number),
+      _body: { state: 'closed' },
+    });
+    return {
+      id: String(data.id),
+      number: data.id || 0,
+      title: data.title || '',
+      body: data.content?.raw || undefined,
+      state: 'closed',
+      author: this.mapUser(data.reporter || {}),
+      labels: [],
+      assignees: data.assignee ? [this.mapUser(data.assignee)] : [],
+      url: data.links?.html?.href || '',
+      createdAt: new Date(data.created_on || Date.now()),
+      updatedAt: new Date(data.updated_on || Date.now()),
+    };
+  }
+
   async addIssueComment(owner: string, repo: string, number: number, body: string): Promise<GitComment> {
     const { data } = await this.api.repositories.createIssueComment({
       workspace: owner,
@@ -689,7 +711,7 @@ export class BitbucketAdapter implements GitProviderAdapter {
 
   // File write operations
   async createOrUpdateFile(owner: string, repo: string, input: import('./types.js').CreateFileInput): Promise<void> {
-    await this.bitbucket.repositories.createSrcFileCommit({ workspace: owner, repo_slug: repo, message: input.message, [input.path]: input.content } as any);
+    await (this.api as any).repositories.createSrcFileCommit({ workspace: owner, repo_slug: repo, message: input.message, [input.path]: input.content });
   }
 
   async deleteFile(_owner: string, _repo: string, _path: string, _message: string): Promise<void> {
@@ -697,20 +719,20 @@ export class BitbucketAdapter implements GitProviderAdapter {
   }
 
   async searchCode(owner: string, repo: string, query: string): Promise<import('./types.js').CodeSearchResult[]> {
-    const { data } = await this.bitbucket.repositories.listSrc({ workspace: owner, repo_slug: repo, q: query } as any);
+    const { data } = await (this.api as any).repositories.listSrc({ workspace: owner, repo_slug: repo, q: query });
     return ((data as any)?.values || []).map((v: any) => ({ path: String(v.path || ''), matches: [] }));
   }
 
   async createBranch(owner: string, repo: string, branchName: string, fromRef: string): Promise<import('./types.js').GitBranch> {
-    await this.bitbucket.repositories.createBranch({ workspace: owner, repo_slug: repo, _body: { name: branchName, target: { hash: fromRef } } } as any);
+    await (this.api as any).repositories.createBranch({ workspace: owner, repo_slug: repo, _body: { name: branchName, target: { hash: fromRef } } });
     return { name: branchName, sha: fromRef, isDefault: false, isProtected: false };
   }
 
   async createPullRequest(owner: string, repo: string, input: import('./types.js').CreatePullRequestInput): Promise<import('./types.js').GitPullRequest> {
-    const { data } = await this.bitbucket.repositories.createPullRequest({
+    const { data } = await (this.api as any).repositories.createPullRequest({
       workspace: owner, repo_slug: repo,
       _body: { title: input.title, source: { branch: { name: input.head } }, destination: { branch: { name: input.base } }, description: input.body },
-    } as any);
+    });
     const pr = data as any;
     return {
       id: String(pr.id), number: pr.id, title: input.title, description: input.body,
@@ -720,7 +742,7 @@ export class BitbucketAdapter implements GitProviderAdapter {
     };
   }
 
-  async listWorkflows(owner: string, repo: string): Promise<import('./types.js').GitWorkflow[]> {
+  async listWorkflows(_owner: string, _repo: string): Promise<import('./types.js').GitWorkflow[]> {
     return [{ id: 'default', name: 'Bitbucket Pipelines', path: 'bitbucket-pipelines.yml', state: 'active' }];
   }
 
@@ -729,27 +751,27 @@ export class BitbucketAdapter implements GitProviderAdapter {
   }
 
   async triggerWorkflow(owner: string, repo: string, _workflowId: string, ref: string, inputs?: Record<string, string>): Promise<import('./types.js').GitWorkflowRun> {
-    const { data } = await this.bitbucket.pipelines.createPipeline({ workspace: owner, repo_slug: repo, _body: { target: { type: 'pipeline_ref_target', ref_type: 'branch', ref_name: ref }, variables: inputs ? Object.entries(inputs).map(([key, value]) => ({ key, value })) : undefined } } as any);
+    const { data } = await (this.api as any).pipelines.createPipeline({ workspace: owner, repo_slug: repo, _body: { target: { type: 'pipeline_ref_target', ref_type: 'branch', ref_name: ref }, variables: inputs ? Object.entries(inputs).map(([key, value]) => ({ key, value })) : undefined } });
     const p = data as any;
     return { id: String(p.uuid || Date.now()), name: 'Pipeline', status: 'queued', branch: ref, sha: '', url: '', createdAt: new Date(), updatedAt: new Date() };
   }
 
   async listEnvironments(owner: string, repo: string): Promise<import('./types.js').GitEnvironment[]> {
-    const { data } = await this.bitbucket.repositories.listEnvironments({ workspace: owner, repo_slug: repo } as any);
+    const { data } = await (this.api as any).repositories.listEnvironments({ workspace: owner, repo_slug: repo });
     return ((data as any)?.values || []).map((e: any) => ({ id: String(e.uuid), name: String(e.name) }));
   }
 
-  async getEnvironmentVariables(owner: string, repo: string, envName: string): Promise<import('./types.js').GitVariable[]> {
-    const { data } = await this.bitbucket.pipelines.listVariablesForWorkspace({ workspace: owner } as any);
+  async getEnvironmentVariables(owner: string, _repo: string, _envName: string): Promise<import('./types.js').GitVariable[]> {
+    const { data } = await (this.api as any).pipelines.listVariablesForWorkspace({ workspace: owner });
     return ((data as any)?.values || []).map((v: any) => ({ name: String(v.key), value: String(v.value || ''), isSecret: v.secured || false }));
   }
 
-  async setEnvironmentVariable(owner: string, repo: string, _envName: string, name: string, value: string, isSecret = false): Promise<void> {
-    await this.bitbucket.pipelines.createVariableForWorkspace({ workspace: owner, _body: { key: name, value, secured: isSecret } } as any);
+  async setEnvironmentVariable(owner: string, _repo: string, _envName: string, name: string, value: string, isSecret = false): Promise<void> {
+    await (this.api as any).pipelines.createVariableForWorkspace({ workspace: owner, _body: { key: name, value, secured: isSecret } });
   }
 
-  async deleteEnvironmentVariable(owner: string, repo: string, _envName: string, name: string): Promise<void> {
-    await this.bitbucket.pipelines.deleteVariableForWorkspace({ workspace: owner, variable_uuid: name } as any);
+  async deleteEnvironmentVariable(owner: string, _repo: string, _envName: string, name: string): Promise<void> {
+    await (this.api as any).pipelines.deleteVariableForWorkspace({ workspace: owner, variable_uuid: name });
   }
 
   async getRepositoryVariables(owner: string, repo: string): Promise<import('./types.js').GitVariable[]> {
@@ -764,11 +786,11 @@ export class BitbucketAdapter implements GitProviderAdapter {
     return this.deleteEnvironmentVariable(owner, repo, '', name);
   }
 
-  async listDeployments(owner: string, repo: string, _environment?: string): Promise<import('./types.js').GitDeployment[]> {
+  async listDeployments(_owner: string, _repo: string, _environment?: string): Promise<import('./types.js').GitDeployment[]> {
     return [];
   }
 
-  async createDeployment(owner: string, repo: string, ref: string, environment: string, _description?: string): Promise<import('./types.js').GitDeployment> {
+  async createDeployment(_owner: string, _repo: string, ref: string, environment: string, _description?: string): Promise<import('./types.js').GitDeployment> {
     return { id: String(Date.now()), environment, status: 'pending', sha: ref, createdAt: new Date() };
   }
 
