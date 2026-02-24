@@ -1,4 +1,5 @@
-import { platform } from 'node:os';
+import { platform, tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { type ToolRegistry } from './registry.js';
 import { shellExec } from './shell/process-manager.js';
 
@@ -12,16 +13,18 @@ export function registerSystemTools(registry: ToolRegistry): void {
       description: 'Capture a screenshot of the desktop screen.',
       input_schema: {
         type: 'object',
-        properties: { output_path: { type: 'string', description: 'Output file path (default: /tmp/screenshot.png)' } },
+        properties: { output_path: { type: 'string', description: 'Output file path (default: OS temp dir)' } },
       },
     },
     handler: async (input) => {
-      const outPath = (input.output_path as string) || '/tmp/megasloth_screenshot.png';
+      const outPath = (input.output_path as string) || join(tmpdir(), 'megasloth_screenshot.png');
       let cmd: string;
       if (os === 'darwin') {
-        cmd = `screencapture -x ${outPath}`;
+        cmd = `screencapture -x ${JSON.stringify(outPath)}`;
+      } else if (os === 'win32') {
+        cmd = `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $bmp = [System.Drawing.Bitmap]::new([System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width, [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen(0, 0, 0, 0, $bmp.Size); $bmp.Save('${outPath.replace(/'/g, "''")}'); $g.Dispose(); $bmp.Dispose()"`;
       } else {
-        cmd = `scrot ${outPath} 2>/dev/null || gnome-screenshot -f ${outPath} 2>/dev/null || import -window root ${outPath}`;
+        cmd = `scrot ${JSON.stringify(outPath)} 2>/dev/null || gnome-screenshot -f ${JSON.stringify(outPath)} 2>/dev/null || import -window root ${JSON.stringify(outPath)}`;
       }
       const result = await shellExec(cmd, { timeout: 10 });
       return result.exitCode === 0 ? `Screenshot saved: ${outPath}` : `Failed: ${result.stderr}`;
@@ -36,7 +39,14 @@ export function registerSystemTools(registry: ToolRegistry): void {
       input_schema: { type: 'object', properties: {} },
     },
     handler: async () => {
-      const cmd = os === 'darwin' ? 'pbpaste' : 'xclip -selection clipboard -o 2>/dev/null || xsel --clipboard --output';
+      let cmd: string;
+      if (os === 'darwin') {
+        cmd = 'pbpaste';
+      } else if (os === 'win32') {
+        cmd = 'powershell -NoProfile -Command "Get-Clipboard"';
+      } else {
+        cmd = 'xclip -selection clipboard -o 2>/dev/null || xsel --clipboard --output';
+      }
       const result = await shellExec(cmd, { timeout: 5 });
       return result.stdout || '(clipboard empty)';
     },
@@ -55,9 +65,14 @@ export function registerSystemTools(registry: ToolRegistry): void {
     },
     handler: async (input) => {
       const text = input.text as string;
-      const cmd = os === 'darwin'
-        ? `echo ${JSON.stringify(text)} | pbcopy`
-        : `echo ${JSON.stringify(text)} | xclip -selection clipboard 2>/dev/null || echo ${JSON.stringify(text)} | xsel --clipboard --input`;
+      let cmd: string;
+      if (os === 'darwin') {
+        cmd = `echo ${JSON.stringify(text)} | pbcopy`;
+      } else if (os === 'win32') {
+        cmd = `powershell -NoProfile -Command "Set-Clipboard -Value ${JSON.stringify(text)}"`;
+      } else {
+        cmd = `echo ${JSON.stringify(text)} | xclip -selection clipboard 2>/dev/null || echo ${JSON.stringify(text)} | xsel --clipboard --input`;
+      }
       const result = await shellExec(cmd, { timeout: 5 });
       return result.exitCode === 0 ? 'Copied to clipboard' : `Failed: ${result.stderr}`;
     },
@@ -83,10 +98,13 @@ export function registerSystemTools(registry: ToolRegistry): void {
       let cmd: string;
       if (os === 'darwin') {
         cmd = `osascript -e 'display notification ${JSON.stringify(message)} with title ${JSON.stringify(title)}'`;
+      } else if (os === 'win32') {
+        const ps = `[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; $n.Visible = $true; $n.ShowBalloonTip(5000, '${title.replace(/'/g, "''")}', '${message.replace(/'/g, "''")}', 'Info'); Start-Sleep -Seconds 3; $n.Dispose()`;
+        cmd = `powershell -NoProfile -Command "${ps}"`;
       } else {
         cmd = `notify-send ${JSON.stringify(title)} ${JSON.stringify(message)}`;
       }
-      const result = await shellExec(cmd, { timeout: 5 });
+      const result = await shellExec(cmd, { timeout: 10 });
       return result.exitCode === 0 ? 'Notification sent' : `Failed: ${result.stderr}`;
     },
   });
@@ -104,7 +122,14 @@ export function registerSystemTools(registry: ToolRegistry): void {
     },
     handler: async (input) => {
       const target = input.target as string;
-      const cmd = os === 'darwin' ? `open ${JSON.stringify(target)}` : `xdg-open ${JSON.stringify(target)}`;
+      let cmd: string;
+      if (os === 'darwin') {
+        cmd = `open ${JSON.stringify(target)}`;
+      } else if (os === 'win32') {
+        cmd = `start "" ${JSON.stringify(target)}`;
+      } else {
+        cmd = `xdg-open ${JSON.stringify(target)}`;
+      }
       const result = await shellExec(cmd, { timeout: 10 });
       return result.exitCode === 0 ? `Opened: ${target}` : `Failed: ${result.stderr}`;
     },

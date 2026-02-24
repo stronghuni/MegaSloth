@@ -6,13 +6,30 @@ import { stopCommand } from './commands/stop.js';
 import { configCommand } from './commands/config.js';
 import { skillCommand } from './commands/skill.js';
 import { statusCommand } from './commands/status.js';
+import { chatCommand } from './commands/chat.js';
+import { banner, cmd, blank, hint, divider } from './ui.js';
 
 const program = new Command();
 
 program
   .name('megasloth')
-  .description('MegaSloth - AI-Powered Repository Operations Agent')
-  .version('1.0.0');
+  .description('MegaSloth — AI-Powered Full Automation Agent')
+  .version('1.0.0')
+  .action(() => {
+    banner();
+    divider();
+    blank();
+    cmd('megasloth init', 'Initialize in current directory');
+    cmd('megasloth start', 'Start the agent');
+    cmd('megasloth chat', 'Interactive chat with the agent');
+    cmd('megasloth status', 'Show agent status');
+    cmd('megasloth stop', 'Stop the agent');
+    cmd('megasloth config show', 'Show configuration');
+    cmd('megasloth skill list', 'List available skills');
+    blank();
+    hint('Slow is smooth, smooth is fast. 🦥');
+    blank();
+  });
 
 program.addCommand(initCommand);
 program.addCommand(startCommand);
@@ -20,5 +37,6 @@ program.addCommand(stopCommand);
 program.addCommand(configCommand);
 program.addCommand(skillCommand);
 program.addCommand(statusCommand);
+program.addCommand(chatCommand);
 
 program.parse();

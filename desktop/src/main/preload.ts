@@ -5,7 +5,8 @@ contextBridge.exposeInMainWorld('megasloth', {
   startCore: () => ipcRenderer.invoke('start-core'),
   stopCore: () => ipcRenderer.invoke('stop-core'),
   getVersion: () => ipcRenderer.invoke('get-version'),
-  fetchApi: (endpoint: string) => ipcRenderer.invoke('fetch-api', endpoint),
+  fetchApi: (endpoint: string, options?: { method?: string; body?: unknown }) =>
+    ipcRenderer.invoke('fetch-api', endpoint, options),
   onCoreStatus: (callback: (status: { running: boolean; error?: string; exitCode?: number }) => void) => {
     ipcRenderer.on('core-status', (_, status) => callback(status));
   },

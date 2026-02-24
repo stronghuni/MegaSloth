@@ -1,0 +1,31 @@
+# MegaBot Configuration
+# This file is optional - environment variables take precedence
+
+# Server configuration
+server:
+  httpPort: 3000
+  webhookPort: 3001
+  websocketPort: 18789
+  host: "0.0.0.0"
+
+# Logging configuration
+logging:
+  level: info    # trace, debug, info, warn, error, fatal
+  pretty: true   # Enable pretty printing for development
+
+# Anthropic Claude configuration
+# anthropic:
+#   model: claude-sonnet-4-20250514
+#   maxTokens: 4096
+
+# GitHub configuration
+# github:
+#   apiUrl: https://api.github.com  # For GitHub Enterprise, use your instance URL
+
+# GitLab configuration
+# gitlab:
+#   url: https://gitlab.com  # For self-hosted GitLab, use your instance URL
+
+# Slack configuration
+# slack:
+#   defaultChannel: general

@@ -1,6 +1,7 @@
 import { Command } from 'commander';
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { banner, heading, blank, colors as c } from '../ui.js';
 
 export const skillCommand = new Command('skill')
   .description('Manage MegaSloth skills');
@@ -9,12 +10,19 @@ skillCommand
   .command('list')
   .description('List all available skills')
   .action(async () => {
-    console.log('\n  🦥 MegaSloth Skills\n');
+    banner();
+    heading('Skills');
+
+    const builtinFromDist = join(import.meta.dirname, '../../skills/builtin');
+    const builtinFromSrc = join('src', 'skills', 'builtin');
+    const builtinPath = existsSync(builtinFromDist) ? builtinFromDist : builtinFromSrc;
 
     const skillDirs = [
-      { path: join('src', 'skills', 'builtin'), label: 'Built-in' },
-      { path: '.megasloth/skills', label: 'Custom' },
+      { path: builtinPath, label: 'built-in' },
+      { path: '.megasloth/skills', label: 'custom' },
     ];
+
+    let found = 0;
 
     for (const { path: dir, label } of skillDirs) {
       if (!existsSync(dir)) continue;
@@ -27,7 +35,6 @@ skillCommand
         const skillFile = join(skillDir, 'SKILL.md');
         if (!existsSync(skillFile)) continue;
 
-        const { readFileSync } = await import('node:fs');
         const content = readFileSync(skillFile, 'utf-8');
         const frontmatter = content.match(/^---\n([\s\S]*?)\n---/);
 
@@ -43,10 +50,18 @@ skillCommand
           enabled = meta.enabled !== false;
         }
 
-        const status = enabled ? '✓' : '✗';
-        console.log(`  ${status}  [${label}] ${name}`);
-        if (description) console.log(`       ${description}`);
+        const icon = enabled ? `${c.green}●${c.reset}` : `${c.dim}○${c.reset}`;
+        const tag = `${c.dim}[${label}]${c.reset}`;
+        console.log(`  ${icon} ${name} ${tag}`);
+        if (description) {
+          console.log(`    ${c.dim}${description}${c.reset}`);
+        }
+        found++;
       }
     }
-    console.log('');
+
+    if (found === 0) {
+      console.log(`  ${c.dim}No skills found.${c.reset}`);
+    }
+    blank();
   });

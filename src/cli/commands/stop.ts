@@ -1,20 +1,27 @@
 import { Command } from 'commander';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, unlinkSync } from 'node:fs';
+import { banner, success, info, blank } from '../ui.js';
 
 export const stopCommand = new Command('stop')
   .description('Stop the MegaSloth agent')
   .action(async () => {
+    banner();
+
     const pidFile = '.megasloth/data/megasloth.pid';
     if (!existsSync(pidFile)) {
-      console.log('  MegaSloth is not running (no PID file found).');
+      info('Agent is not running.');
+      blank();
       return;
     }
 
     try {
       const pid = parseInt(readFileSync(pidFile, 'utf-8').trim(), 10);
       process.kill(pid, 'SIGTERM');
-      console.log(`  ✓  Sent stop signal to MegaSloth (PID: ${pid})`);
-    } catch (error) {
-      console.log('  MegaSloth process not found. It may have already stopped.');
+      unlinkSync(pidFile);
+      success(`Stopped agent (PID: ${pid})`);
+    } catch {
+      info('Agent process not found. It may have already stopped.');
+      if (existsSync(pidFile)) unlinkSync(pidFile);
     }
+    blank();
   });

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-#   MegaSloth Installer
+#   MegaSloth Desktop App Installer
 #   Full Automation Agent — One API Key, Total Control
 #
 #   Usage:
@@ -32,16 +32,17 @@ NC='\033[0m'
 
 print_banner() {
   echo ""
-  echo -e "${CYAN}${BOLD}"
-  echo "  ╔══════════════════════════════════════════════════════╗"
-  echo "  ║                                                      ║"
-  echo "  ║          🦥  M E G A S L O T H                      ║"
-  echo "  ║                                                      ║"
-  echo "  ║    Full Automation Agent                              ║"
-  echo "  ║    One API Key, Total Control                         ║"
-  echo "  ║                                                      ║"
-  echo "  ╚══════════════════════════════════════════════════════╝"
-  echo -e "${NC}"
+  echo -e "${GREEN}    ╭─────────────────────────────────╮${NC}"
+  echo -e "${GREEN}    │${NC}  ${DIM}      ___            ___  ${NC}     ${GREEN}│${NC}"
+  echo -e "${GREEN}    │${NC}  ${DIM}     (${YELLOW}o o${NC}${DIM})  ___  (${YELLOW}o o${NC}${DIM}) ${NC}     ${GREEN}│${NC}"
+  echo -e "${GREEN}    │${NC}  ${DIM}      \\ /  / ${WHITE}${BOLD}M${NC}${DIM} \\  \\ / ${NC}      ${GREEN}│${NC}"
+  echo -e "${GREEN}    │${NC}  ${DIM}    ───${GREEN}(${NC}${DIM}(${GREEN})${NC}${DIM}──${GREEN}(${NC}${DIM}(${GREEN})${NC}${DIM}──${GREEN}(${NC}${DIM}(${GREEN})${NC}${DIM}───${NC}   ${GREEN}│${NC}"
+  echo -e "${GREEN}    │${NC}  ${DIM}       │  \\_/  │       ${NC}   ${GREEN}│${NC}"
+  echo -e "${GREEN}    │${NC}  ${DIM}       └───┬───┘${NC}           ${GREEN}│${NC}"
+  echo -e "${GREEN}    │${NC}  ${WHITE}${BOLD}  M E G A S L O T H${NC}        ${GREEN}│${NC}"
+  echo -e "${GREEN}    │${NC}  ${DIM}  Desktop App Installer${NC}    ${GREEN}│${NC}"
+  echo -e "${GREEN}    ╰─────────────────────────────────╯${NC}"
+  echo ""
 }
 
 info()    { echo -e "  ${BLUE}▸${NC} $1"; }
@@ -69,13 +70,16 @@ detect_os() {
   if [ "$OS" = "unknown" ]; then
     error "Unsupported operating system: $(uname -s)"
     echo ""
-    echo "  MegaSloth supports: macOS, Linux, and Windows (WSL)"
+    echo "  Supported: macOS, Linux, Windows (WSL/MSYS/MINGW)"
+    echo ""
+    echo -e "  ${DIM}For native Windows, use PowerShell:${NC}"
+    echo -e "  ${CYAN}irm https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.ps1 | iex${NC}"
     exit 1
   fi
 }
 
 # ─────────────────────────────────────────────────────
-# Silent Dependency Installers (no user interaction)
+# Silent Dependency Installers
 # ─────────────────────────────────────────────────────
 check_command() { command -v "$1" &>/dev/null; }
 
@@ -109,6 +113,8 @@ auto_install_node() {
     elif check_command pacman; then
       sudo pacman -Sy --noconfirm nodejs npm
     fi
+  elif [ "$OS" = "windows" ]; then
+    info "On Windows/MSYS, please install Node.js from https://nodejs.org"
   fi
 }
 
@@ -161,6 +167,9 @@ main() {
 
   info "Detected: ${BOLD}$OS${NC} (${ARCH})"
   echo ""
+  echo -e "  ${DIM}This installs the MegaSloth Desktop App (Electron).${NC}"
+  echo -e "  ${DIM}For CLI-only: npm install -g megasloth${NC}"
+  echo ""
 
   # ═══════════════════════════════════════════════════
   # STEP 1: Terms of Service
@@ -204,7 +213,7 @@ main() {
   fi
 
   # ═══════════════════════════════════════════════════
-  # STEP 2: LLM API Key (the ONLY user input needed)
+  # STEP 2: LLM API Key
   # ═══════════════════════════════════════════════════
   step 2 "AI Provider Setup"
 
@@ -251,7 +260,7 @@ main() {
   echo -e "  ${DIM}  GitHub, GitLab, AWS, Redis — the agent provisions it all.${NC}"
 
   # ═══════════════════════════════════════════════════
-  # STEP 3: Auto-install all dependencies (silent)
+  # STEP 3: Auto-install all dependencies
   # ═══════════════════════════════════════════════════
   step 3 "Installing dependencies (automatic)"
 
@@ -274,13 +283,17 @@ main() {
   auto_install_pnpm
   check_command pnpm && success "pnpm $(pnpm -v 2>/dev/null)" || warn "pnpm not available"
 
-  # Redis
-  if redis-cli ping &>/dev/null 2>&1; then
-    success "Redis: running"
+  # Redis (skip on Windows MSYS — not natively supported)
+  if [ "$OS" != "windows" ]; then
+    if redis-cli ping &>/dev/null 2>&1; then
+      success "Redis: running"
+    else
+      info "Installing Redis..."
+      auto_install_redis
+      redis-cli ping &>/dev/null 2>&1 && success "Redis: running" || warn "Redis: will start on first use"
+    fi
   else
-    info "Installing Redis..."
-    auto_install_redis
-    redis-cli ping &>/dev/null 2>&1 && success "Redis: running" || warn "Redis: will start on first use"
+    warn "Redis: install separately on Windows (https://github.com/tporadowski/redis)"
   fi
 
   # GitHub CLI
@@ -295,7 +308,7 @@ main() {
   # ═══════════════════════════════════════════════════
   # STEP 4: Download, build, install app
   # ═══════════════════════════════════════════════════
-  step 4 "Installing MegaSloth"
+  step 4 "Installing MegaSloth Desktop App"
 
   if [ -d "$MEGASLOTH_DIR" ]; then
     info "Updating existing installation..."
@@ -315,7 +328,6 @@ main() {
 
   success "Source: $MEGASLOTH_DIR"
 
-  # Install deps & build core
   info "Installing packages..."
   pnpm install --frozen-lockfile 2>/dev/null || pnpm install
   success "Packages installed"
@@ -323,10 +335,9 @@ main() {
   info "Building core..."
   pnpm build 2>/dev/null || warn "TypeScript build skipped (dev mode available)"
 
-  # Create data directories
   mkdir -p .megasloth/data .megasloth/skills
 
-  # Generate .env (no user interaction needed beyond what we already have)
+  # Generate .env
   local anthropic_key="" openai_key="" gemini_key=""
   case "$LLM_PROVIDER" in
     claude)  anthropic_key="${api_key:-}" ;;
@@ -335,9 +346,8 @@ main() {
   esac
 
   local webhook_secret
-  webhook_secret=$(openssl rand -hex 20 2>/dev/null || head -c 40 /dev/urandom | od -A n -t x1 | tr -d ' \n')
+  webhook_secret=$(openssl rand -hex 20 2>/dev/null || head -c 20 /dev/urandom | od -A n -t x1 | tr -d ' \n')
 
-  # Auto-detect GitHub token if gh is logged in
   local github_token=""
   if check_command gh && gh auth status &>/dev/null 2>&1; then
     github_token=$(gh auth token 2>/dev/null || true)
@@ -371,6 +381,8 @@ ENVEOF
       pnpm build:mac 2>/dev/null && success "Desktop app built (macOS)" || warn "Desktop build skipped — use CLI mode"
     elif [ "$OS" = "linux" ]; then
       pnpm build:linux 2>/dev/null && success "Desktop app built (Linux)" || warn "Desktop build skipped — use CLI mode"
+    elif [ "$OS" = "windows" ]; then
+      pnpm build:win 2>/dev/null && success "Desktop app built (Windows)" || warn "Desktop build skipped — use CLI mode"
     fi
     cd "$MEGASLOTH_DIR"
   fi
@@ -380,7 +392,6 @@ ENVEOF
   # ═══════════════════════════════════════════════════
   step 5 "Finalizing"
 
-  # Create CLI wrapper
   if [ -w "/usr/local/bin" ]; then
     INSTALL_BIN="/usr/local/bin/megasloth"
   elif [ -d "$HOME/.local/bin" ]; then
@@ -410,10 +421,20 @@ case "${1:-}" in
     [ -f ".megasloth/data/megasloth.pid" ] && kill "$(cat .megasloth/data/megasloth.pid)" 2>/dev/null && rm -f .megasloth/data/megasloth.pid && echo "  ✓ Stopped" || echo "  Not running" ;;
   app)
     APP_PATH=""
-    [ -d "desktop/release" ] && APP_PATH=$(find desktop/release -name "MegaSloth*" -type d 2>/dev/null | head -1)
-    if [ -n "$APP_PATH" ] && [ "$OSTYPE" = "darwin"* ]; then open "$APP_PATH"
-    elif [ -n "$APP_PATH" ]; then "$APP_PATH" &
-    else echo "  Desktop app not built. Run: megasloth start"; fi ;;
+    if [ -d "desktop/release" ]; then
+      case "$(uname -s)" in
+        Darwin)
+          APP_PATH=$(find desktop/release -name "MegaSloth*.app" -type d 2>/dev/null | head -1)
+          [ -n "$APP_PATH" ] && open "$APP_PATH" ;;
+        MINGW*|MSYS*|CYGWIN*)
+          APP_PATH=$(find desktop/release -name "MegaSloth*.exe" -type f 2>/dev/null | head -1)
+          [ -n "$APP_PATH" ] && start "" "$APP_PATH" ;;
+        *)
+          APP_PATH=$(find desktop/release -name "MegaSloth*.AppImage" -type f 2>/dev/null | head -1)
+          [ -n "$APP_PATH" ] && "$APP_PATH" & ;;
+      esac
+    fi
+    [ -z "$APP_PATH" ] && echo "  Desktop app not built. Run: megasloth start" ;;
   status)
     echo "  🦥 MegaSloth Status"
     echo "  Install: $MEGASLOTH_DIR"
@@ -427,7 +448,16 @@ case "${1:-}" in
     echo -n "  Remove MegaSloth? [y/N]: "; read -r yn
     case "$yn" in [yY]*) rm -rf "$MEGASLOTH_DIR" "SELF_PATH_PLACEHOLDER"; echo "  ✓ Uninstalled" ;; *) echo "  Cancelled" ;; esac ;;
   help|--help|-h|"")
-    echo "  🦥 MegaSloth — Full Automation Agent"
+    echo ""
+    echo "        ___            ___"
+    echo "       (o o)  ___  (o o)"
+    echo "        \ /  / M \  \ /"
+    echo "      ---(()---(()---(()---"
+    echo "         |  \_/  |"
+    echo "         └───┬───┘"
+    echo ""
+    echo "  MegaSloth — Full Automation Agent"
+    echo "  Slow is smooth, smooth is fast."
     echo ""
     echo "  megasloth start      Start agent (foreground)"
     echo "  megasloth start:bg   Start agent (background)"
@@ -437,16 +467,20 @@ case "${1:-}" in
     echo "  megasloth logs       View logs"
     echo "  megasloth config     Edit settings"
     echo "  megasloth update     Update to latest"
-    echo "  megasloth uninstall  Remove MegaSloth" ;;
+    echo "  megasloth uninstall  Remove MegaSloth"
+    echo "" ;;
   *) echo "  Unknown: $1 — run 'megasloth help'" ;;
 esac
 WRAPPER
 
-  sed -i.bak "s|INSTALL_DIR_PLACEHOLDER|$MEGASLOTH_DIR|g" "$INSTALL_BIN" 2>/dev/null || \
-  sed -i '' "s|INSTALL_DIR_PLACEHOLDER|$MEGASLOTH_DIR|g" "$INSTALL_BIN"
-  sed -i.bak "s|SELF_PATH_PLACEHOLDER|$INSTALL_BIN|g" "$INSTALL_BIN" 2>/dev/null || \
-  sed -i '' "s|SELF_PATH_PLACEHOLDER|$INSTALL_BIN|g" "$INSTALL_BIN"
-  rm -f "${INSTALL_BIN}.bak"
+  # Replace placeholders — portable sed for both GNU and BSD
+  if sed --version 2>/dev/null | grep -q GNU; then
+    sed -i "s|INSTALL_DIR_PLACEHOLDER|$MEGASLOTH_DIR|g" "$INSTALL_BIN"
+    sed -i "s|SELF_PATH_PLACEHOLDER|$INSTALL_BIN|g" "$INSTALL_BIN"
+  else
+    sed -i '' "s|INSTALL_DIR_PLACEHOLDER|$MEGASLOTH_DIR|g" "$INSTALL_BIN"
+    sed -i '' "s|SELF_PATH_PLACEHOLDER|$INSTALL_BIN|g" "$INSTALL_BIN"
+  fi
   chmod +x "$INSTALL_BIN"
   success "Command: $INSTALL_BIN"
 
@@ -468,24 +502,16 @@ WRAPPER
   # ═══════════════════════════════════════════════════
   echo ""
   echo -e "  ${GREEN}${BOLD}══════════════════════════════════════════════════════${NC}"
-  echo -e "  ${GREEN}${BOLD}  🦥  MegaSloth installed successfully!${NC}"
+  echo -e "  ${GREEN}${BOLD}  🦥  MegaSloth Desktop App installed!${NC}"
   echo -e "  ${GREEN}${BOLD}══════════════════════════════════════════════════════${NC}"
-  echo ""
-  echo -e "  ${WHITE}The agent has full control. It will automatically:${NC}"
-  echo ""
-  echo -e "    ${GREEN}✓${NC} Provision GitHub/GitLab/AWS/GCP credentials"
-  echo -e "    ${GREEN}✓${NC} Set up CI/CD pipelines and webhooks"
-  echo -e "    ${GREEN}✓${NC} Execute shell commands and manage processes"
-  echo -e "    ${GREEN}✓${NC} Browse the web and automate browser tasks"
-  echo -e "    ${GREEN}✓${NC} Read/write/edit local files"
-  echo -e "    ${GREEN}✓${NC} Plan and execute complex workflows"
   echo ""
   echo -e "  ${WHITE}Get started:${NC}"
   echo ""
-  echo -e "    ${CYAN}megasloth start${NC}    Start the agent"
   echo -e "    ${CYAN}megasloth app${NC}      Launch desktop app"
+  echo -e "    ${CYAN}megasloth start${NC}    Start agent (CLI mode)"
   echo -e "    ${CYAN}megasloth help${NC}     Show all commands"
   echo ""
+  echo -e "  ${DIM}For CLI-only installation: npm install -g megasloth${NC}"
   echo -e "  ${WHITE}Docs:${NC} ${BLUE}https://github.com/stronghuni/MegaSloth${NC}"
   echo ""
 }

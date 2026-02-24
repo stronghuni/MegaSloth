@@ -2,10 +2,14 @@
   <img src="logo.png" alt="MegaSloth" width="800" />
 </p>
 
-<h1 align="center">MegaSloth</h1>
+<h1 align="center">🦥 MegaSloth</h1>
 
 <p align="center">
-  <strong>Full Automation Agent — One API Key, Total Control</strong><br/>
+  <em>Slow is smooth, smooth is fast.</em>
+</p>
+
+<p align="center">
+  <strong>AI-Powered Full Automation Agent — One API Key, Total Control</strong><br/>
   Shell, Browser, Filesystem, Web, Git, CI/CD, Credentials — all automated by AI
 </p>
 
@@ -31,29 +35,44 @@
 
 ---
 
-## 🚀 One-Line Install
+## 🚀 Quick Start
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.sh | bash
-```
+### Desktop App — For Everyone
 
-You only need to do **two things**:
+> GUI app. No coding required. Just need one LLM API key.
+
+| Platform | Install Command |
+|----------|-----------------|
+| **macOS / Linux** | `curl -fsSL https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.sh \| bash` |
+| **Windows** | `irm https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.ps1 \| iex` |
+
+Works on **macOS, Windows & Linux**. The installer handles everything:
 
 1. **Accept the terms** — grant the agent full system access
 2. **Enter one LLM API key** — Claude, OpenAI, or Gemini
 
-Everything else is automatic:
-- Node.js, Redis, GitHub CLI — **auto-installed**
-- GitHub/GitLab/AWS tokens — **auto-provisioned by the agent**
-- Electron desktop app — **auto-built**
-
-> **No coding experience required.** The agent handles everything from here.
+That's it. Node.js, Redis, GitHub CLI are **auto-installed**. The Electron desktop app is **auto-built**.
 
 ```bash
-megasloth start     # Start the agent
 megasloth app       # Launch desktop app
-megasloth status    # Check if running
+megasloth start     # Start agent (CLI mode)
 megasloth help      # Show all commands
+```
+
+---
+
+### CLI — For Developers
+
+> Terminal-based. Requires Node.js >= 22.
+
+```bash
+npm install -g megasloth
+```
+
+```bash
+megasloth init      # Initialize in current directory
+megasloth start     # Start the agent
+megasloth status    # Check status
 ```
 
 ---
@@ -103,7 +122,7 @@ MegaSloth is a **full automation agent** with tools spanning every layer of your
 | **Filesystem** (7) | `fs_read/write/edit/list/delete/search/info` | Full local file access with edit-in-place |
 | **Web** (3) | `web_search`, `web_fetch`, `web_screenshot` | DuckDuckGo search, readable page extraction, screenshots |
 | **Browser** (10) | `browser_launch/navigate/click/type/screenshot/snapshot/scroll/evaluate/wait/tabs` | Playwright-based full browser automation |
-| **System** (5) | `system_screenshot`, `clipboard_read/write`, `notify`, `open` | OS-level control (macOS/Linux) |
+| **System** (5) | `system_screenshot`, `clipboard_read/write`, `notify`, `open` | OS-level control (macOS/Linux/Windows) |
 | **Git/CI/CD** (30+) | PRs, issues, branches, workflows, deployments, releases, env vars, secrets | Full GitHub/GitLab/Bitbucket control |
 | **Credential** (4) | `credential_provision/list/store/delete` | Auto-provisioning via OAuth Device Flow + encrypted vault |
 | **Memory** (4) | `memory_store/search/list/delete` | Persistent context across sessions |
@@ -150,21 +169,31 @@ Extend MegaSloth with custom plugins:
 
 ---
 
-## 📖 Quick Start Guide
+## 📖 Detailed Setup Guide
 
-### 3 Steps to Full Automation
+### Desktop App (Non-Developers)
 
-**Step 1:** Open Terminal and run the installer
+**Step 1:** Open Terminal (or PowerShell on Windows)
 
-- **Mac:** `Cmd + Space` → "Terminal" → Enter
-- **Linux:** `Ctrl + Alt + T`
-- **Windows:** [Install WSL](https://learn.microsoft.com/en-us/windows/wsl/install) first
+| Platform | How to Open |
+|----------|-------------|
+| **macOS** | `Cmd + Space` → "Terminal" → Enter |
+| **Linux** | `Ctrl + Alt + T` |
+| **Windows** | `Win + X` → "PowerShell" or "Terminal" |
+
+**Step 2:** Run the installer
 
 ```bash
+# macOS / Linux
 curl -fsSL https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.sh | bash
 ```
 
-**Step 2:** Accept the terms and enter your LLM API key
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.ps1 | iex
+```
+
+**Step 3:** Follow the prompts
 
 | Prompt | What to Do |
 |--------|------------|
@@ -172,30 +201,32 @@ curl -fsSL https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.s
 | AI Provider | Choose 1 (Claude), 2 (OpenAI), or 3 (Gemini) |
 | API Key | Paste your key and press Enter |
 
-> That's it. **Nothing else to configure.** The agent takes over from here.
-
-**Step 3:** Launch MegaSloth
+**Step 4:** Launch the app
 
 ```bash
-megasloth start       # CLI mode
-megasloth app         # Desktop app (Electron)
+megasloth app     # Desktop app (Electron GUI)
 ```
 
-The agent will automatically:
-- Detect and install GitHub CLI, then authenticate via OAuth
-- Provision all required API tokens and credentials
-- Set up webhooks, CI/CD pipelines, and monitoring
-- Start executing tasks based on repository events
+> **That's it.** The agent auto-provisions GitHub/GitLab/AWS credentials, sets up webhooks, and starts monitoring.
 
-**Step 4 (optional):** Set up webhooks in your GitHub repository
+---
+
+### CLI (Developers)
+
+```bash
+npm install -g megasloth
+megasloth init          # Initialize in current directory
+# Edit .env with your API keys
+megasloth start         # Start the agent
+```
+
+**Optional:** Set up webhooks in your GitHub repository
 
 Go to your repository → **Settings** → **Webhooks** → **Add webhook**:
 - **Payload URL:** `https://your-server-ip:3001/webhook/github`
 - **Content type:** `application/json`
 - **Secret:** (the secret shown during setup)
 - **Events:** Select "Send me everything" or choose specific events
-
-Done! MegaSloth will now monitor your repository 24/7.
 
 ---
 
@@ -255,24 +286,16 @@ Done! MegaSloth will now monitor your repository 24/7.
 
 ---
 
-### For Developers
+### Developer Installation Options
 
-#### Option A: One-Line Install (Recommended)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.sh | bash
-```
-
-#### Option B: Docker
+#### npm (Recommended)
 
 ```bash
-git clone https://github.com/stronghuni/MegaSloth.git
-cd MegaSloth
-cp .env.example .env    # Edit with your API keys
-docker compose up -d
+npm install -g megasloth
+megasloth init && megasloth start
 ```
 
-#### Option C: From Source
+#### From Source
 
 ```bash
 git clone https://github.com/stronghuni/MegaSloth.git
@@ -282,12 +305,13 @@ cp .env.example .env    # Edit with your API keys
 pnpm dev                # Development mode with hot reload
 ```
 
-#### Option D: npm Global
+#### Docker
 
 ```bash
-npm install -g megasloth
-megasloth init
-megasloth start
+git clone https://github.com/stronghuni/MegaSloth.git
+cd MegaSloth
+cp .env.example .env    # Edit with your API keys
+docker compose up -d
 ```
 
 ---
@@ -765,6 +789,24 @@ brew install node@22
 # Linux (via NodeSource)
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt-get install -y nodejs
+
+# Windows
+winget install OpenJS.NodeJS.LTS
+```
+
+</details>
+
+<details>
+<summary><b>Windows: PowerShell script execution blocked</b></summary>
+
+If you see "running scripts is disabled on this system":
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+Then re-run the installer:
+```powershell
+irm https://raw.githubusercontent.com/stronghuni/MegaSloth/main/install.ps1 | iex
 ```
 
 </details>

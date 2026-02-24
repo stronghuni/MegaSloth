@@ -1,7 +1,6 @@
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync, unlinkSync, rmSync, mkdirSync } from 'node:fs';
 import { join, resolve, relative, dirname, extname } from 'node:path';
 import { type ToolRegistry } from './registry.js';
-import { shellExec } from './shell/process-manager.js';
 
 const BINARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.bmp', '.svg',
   '.woff', '.woff2', '.ttf', '.eot', '.mp3', '.mp4', '.avi', '.mov', '.zip', '.tar', '.gz',
@@ -9,6 +8,51 @@ const BINARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.i
 
 function isBinary(filePath: string): boolean {
   return BINARY_EXTENSIONS.has(extname(filePath).toLowerCase());
+}
+
+interface SearchMatch { file: string; line: number; text: string }
+
+function nativeSearch(
+  dir: string,
+  pattern: RegExp,
+  fileExt?: string,
+  maxResults = 50,
+): SearchMatch[] {
+  const results: SearchMatch[] = [];
+  const seen = new Set<string>();
+
+  function walk(current: string, depth: number) {
+    if (depth > 10 || results.length >= maxResults) return;
+    try {
+      const entries = readdirSync(current, { withFileTypes: true });
+      for (const entry of entries) {
+        if (results.length >= maxResults) return;
+        if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'dist') continue;
+
+        const full = join(current, entry.name);
+        if (seen.has(full)) continue;
+        seen.add(full);
+
+        if (entry.isDirectory()) {
+          walk(full, depth + 1);
+        } else if (!isBinary(full)) {
+          if (fileExt && !entry.name.endsWith(`.${fileExt}`)) continue;
+          try {
+            const content = readFileSync(full, 'utf-8');
+            const lines = content.split('\n');
+            for (let i = 0; i < lines.length && results.length < maxResults; i++) {
+              if (pattern.test(lines[i]!)) {
+                results.push({ file: relative(dir, full), line: i + 1, text: lines[i]! });
+              }
+            }
+          } catch { /* unreadable file */ }
+        }
+      }
+    } catch { /* permission denied */ }
+  }
+
+  walk(dir, 0);
+  return results;
 }
 
 export function registerFilesystemTools(registry: ToolRegistry): void {
@@ -170,7 +214,7 @@ export function registerFilesystemTools(registry: ToolRegistry): void {
     category: 'filesystem',
     definition: {
       name: 'fs_search',
-      description: 'Search for text patterns in files using grep/ripgrep.',
+      description: 'Search for text patterns in files using recursive file scanning.',
       input_schema: {
         type: 'object',
         properties: {
@@ -182,11 +226,20 @@ export function registerFilesystemTools(registry: ToolRegistry): void {
       },
     },
     handler: async (input) => {
-      const searchPath = (input.path as string) || '.';
-      const typeArg = input.file_type ? `-t ${input.file_type}` : '';
-      const cmd = `rg --no-heading --line-number --max-count 50 ${typeArg} ${JSON.stringify(input.pattern as string)} ${JSON.stringify(searchPath)} 2>/dev/null || grep -rn --max-count=50 ${JSON.stringify(input.pattern as string)} ${JSON.stringify(searchPath)} 2>/dev/null || echo "No matches found"`;
-      const result = await shellExec(cmd, { timeout: 30 });
-      return result.stdout || result.stderr || 'No matches found';
+      const searchPath = resolve((input.path as string) || '.');
+      if (!existsSync(searchPath)) return `Directory not found: ${searchPath}`;
+
+      let regex: RegExp;
+      try {
+        regex = new RegExp(input.pattern as string, 'i');
+      } catch {
+        regex = new RegExp((input.pattern as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      }
+
+      const matches = nativeSearch(searchPath, regex, input.file_type as string | undefined);
+      if (matches.length === 0) return 'No matches found';
+
+      return matches.map(m => `${m.file}:${m.line}:${m.text}`).join('\n');
     },
   });
 

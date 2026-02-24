@@ -25,10 +25,9 @@ export function Repositories() {
 
   const addRepo = async () => {
     if (!form.owner || !form.name) return;
-    await fetch('http://localhost:13000/api/repositories', {
+    await window.megasloth?.fetchApi('/api/repositories', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: form,
     });
     setShowAdd(false);
     setForm({ provider: 'github', owner: '', name: '' });

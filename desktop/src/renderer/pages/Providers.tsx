@@ -29,13 +29,15 @@ export function Providers() {
     setTesting(provider);
     setTestResult(null);
     try {
-      const res = await fetch('http://localhost:13000/api/providers/test', {
+      const result = await window.megasloth?.fetchApi('/api/providers/test', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, apiKey: 'test' }),
+        body: { provider, apiKey: 'test' },
       });
-      const result = await res.json();
-      setTestResult(result as { provider: string; valid: boolean; error?: string });
+      if (result) {
+        setTestResult(result as { provider: string; valid: boolean; error?: string });
+      } else {
+        setTestResult({ provider, valid: false, error: 'Could not reach API' });
+      }
     } catch {
       setTestResult({ provider, valid: false, error: 'Could not reach API' });
     }

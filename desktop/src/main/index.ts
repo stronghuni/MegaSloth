@@ -16,10 +16,10 @@ function createWindow() {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    title: 'MegaSloth',
+    title: '🦥 MegaSloth',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 15, y: 15 },
-    backgroundColor: '#0f172a',
+    backgroundColor: '#0a0e17',
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -59,17 +59,17 @@ function createTray() {
     : nativeImage.createEmpty();
 
   tray = new Tray(icon);
-  tray.setToolTip('MegaSloth');
+  tray.setToolTip('🦥 MegaSloth — Slow is smooth, smooth is fast');
 
   const updateMenu = () => {
     const isRunning = coreProcess !== null;
     const contextMenu = Menu.buildFromTemplate([
-      { label: 'MegaSloth', type: 'normal', enabled: false },
+      { label: '🦥 MegaSloth', type: 'normal', enabled: false },
       { type: 'separator' },
       { label: 'Open Dashboard', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
       { type: 'separator' },
       { label: isRunning ? 'Stop Agent' : 'Start Agent', click: () => { isRunning ? stopCore() : startCore(); updateMenu(); } },
-      { label: `Status: ${isRunning ? '● Running' : '○ Stopped'}`, enabled: false },
+      { label: `Status: ${isRunning ? '🟢 Running' : '⚫ Stopped'}`, enabled: false },
       { type: 'separator' },
       { label: 'Quit', click: () => { isQuitting = true; stopCore(); app.quit(); } },
     ]);
@@ -124,10 +124,16 @@ ipcMain.handle('start-core', () => { startCore(); return { running: true }; });
 ipcMain.handle('stop-core', () => { stopCore(); return { running: false }; });
 ipcMain.handle('get-version', () => app.getVersion());
 
-ipcMain.handle('fetch-api', async (_, endpoint: string) => {
+ipcMain.handle('fetch-api', async (_, endpoint: string, options?: { method?: string; body?: unknown }) => {
   try {
     const port = process.env.HTTP_PORT || 13000;
-    const res = await fetch(`http://localhost:${port}${endpoint}`);
+    const fetchOptions: RequestInit = {};
+    if (options?.method) fetchOptions.method = options.method;
+    if (options?.body) {
+      fetchOptions.headers = { 'Content-Type': 'application/json' };
+      fetchOptions.body = JSON.stringify(options.body);
+    }
+    const res = await fetch(`http://localhost:${port}${endpoint}`, fetchOptions);
     return await res.json();
   } catch { return null; }
 });

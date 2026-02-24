@@ -61,8 +61,9 @@ export class AutoProvisioner {
       verificationUri: codeData.verification_uri,
     }, 'GitHub Device Flow: user action required');
 
-    // Try to open browser automatically
-    const openCmd = process.platform === 'darwin' ? 'open' : 'xdg-open';
+    const openCmd = process.platform === 'darwin' ? 'open'
+      : process.platform === 'win32' ? 'start ""'
+      : 'xdg-open';
     await shellExec(`${openCmd} "${codeData.verification_uri}"`, { timeout: 5 }).catch(() => {});
 
     console.log(`\n  🦥 GitHub Authorization Required`);

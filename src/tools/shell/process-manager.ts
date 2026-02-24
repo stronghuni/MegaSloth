@@ -1,7 +1,15 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { platform } from 'node:os';
 import { getLogger } from '../../utils/logger.js';
 
 const logger = getLogger('process-manager');
+const isWin = platform() === 'win32';
+
+function shellArgs(command: string): { cmd: string; args: string[] } {
+  return isWin
+    ? { cmd: 'cmd.exe', args: ['/c', command] }
+    : { cmd: 'sh', args: ['-c', command] };
+}
 
 export interface ProcessSession {
   id: string;
@@ -43,7 +51,8 @@ export function shellExec(
   const timeout = (options.timeout ?? 300) * 1000;
 
   return new Promise((resolve) => {
-    const child = spawn('sh', ['-c', command], {
+    const { cmd, args } = shellArgs(command);
+    const child = spawn(cmd, args, {
       cwd,
       env: { ...process.env, ...options.env },
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -81,7 +90,8 @@ export function shellBackground(
   const id = `proc_${++sessionCounter}_${Date.now()}`;
   const cwd = options.cwd || process.cwd();
 
-  const child = spawn('sh', ['-c', command], {
+  const { cmd, args } = shellArgs(command);
+  const child = spawn(cmd, args, {
     cwd,
     env: { ...process.env, ...options.env },
     stdio: ['pipe', 'pipe', 'pipe'],

@@ -22,7 +22,7 @@ Thumbs.db
 # MegaSloth data
 .megasloth/data/
 !.megasloth/data/.gitkeep
-.megabot/
+# Legacy directory name (migrated to .megasloth/)
 
 # Logs
 *.log
