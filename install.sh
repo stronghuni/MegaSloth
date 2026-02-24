@@ -74,6 +74,25 @@ ask()     { echo -ne "  ${CYAN}?${NC} $1"; }
 
 TOTAL_STEPS=5
 
+CAN_PROMPT=false
+if [ -t 0 ]; then
+  CAN_PROMPT=true
+elif [ -e /dev/tty ]; then
+  CAN_PROMPT=true
+fi
+
+prompt_read() {
+  local var_name="$1"
+  local opts="${2:-}"
+  if [ -t 0 ]; then
+    read $opts -r "$var_name"
+  elif [ -e /dev/tty ]; then
+    read $opts -r "$var_name" </dev/tty
+  else
+    eval "$var_name=''"
+  fi
+}
+
 # ─────────────────────────────────────────────────────
 # OS Detection
 # ─────────────────────────────────────────────────────
@@ -115,10 +134,10 @@ auto_install_node() {
   if [ "$OS" = "macos" ]; then
     if ! check_command brew; then
       info "Installing Homebrew..."
-      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/null
+      NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/null
       [ -f "/opt/homebrew/bin/brew" ] && eval "$(/opt/homebrew/bin/brew shellenv)"
     fi
-    brew install node@$REQUIRED_NODE_MAJOR 2>/dev/null
+    brew install node@$REQUIRED_NODE_MAJOR 2>/dev/null || true
     brew link --overwrite node@$REQUIRED_NODE_MAJOR 2>/dev/null || true
   elif [ "$OS" = "linux" ]; then
     if check_command apt-get; then
@@ -140,15 +159,20 @@ auto_install_node() {
 
 auto_install_redis() {
   if [ "$OS" = "macos" ]; then
-    check_command brew && brew install redis 2>/dev/null && brew services start redis 2>/dev/null || true
+    if check_command brew; then
+      brew install redis 2>/dev/null || true
+      brew services start redis 2>/dev/null || true
+    fi
   elif [ "$OS" = "linux" ]; then
     if check_command apt-get; then
-      sudo apt-get install -y redis-server 2>/dev/null
+      sudo apt-get install -y redis-server 2>/dev/null || true
       sudo systemctl enable redis-server 2>/dev/null || sudo service redis-server start 2>/dev/null || true
     elif check_command dnf; then
-      sudo dnf install -y redis 2>/dev/null && sudo systemctl enable --now redis 2>/dev/null || true
+      sudo dnf install -y redis 2>/dev/null || true
+      sudo systemctl enable --now redis 2>/dev/null || true
     elif check_command pacman; then
-      sudo pacman -Sy --noconfirm redis 2>/dev/null && sudo systemctl enable --now redis 2>/dev/null || true
+      sudo pacman -Sy --noconfirm redis 2>/dev/null || true
+      sudo systemctl enable --now redis 2>/dev/null || true
     fi
   fi
 }
@@ -161,7 +185,7 @@ auto_install_pnpm() {
 
 auto_install_gh() {
   if [ "$OS" = "macos" ]; then
-    check_command brew && brew install gh 2>/dev/null || true
+    check_command brew && (brew install gh 2>/dev/null || true)
   elif [ "$OS" = "linux" ]; then
     if check_command apt-get; then
       (type -p wget >/dev/null || sudo apt-get install -y wget) \
@@ -216,9 +240,10 @@ main() {
   echo -e "     the security profile (restricted/standard/full).${NC}"
   echo ""
 
-  if [ -t 0 ]; then
+  if [ "$CAN_PROMPT" = true ]; then
     ask "Do you accept these terms? [y/N]: "
-    read -r accept
+    local accept=""
+    prompt_read accept
     case "$accept" in
       [yY]|[yY][eE][sS])
         success "Terms accepted"
@@ -244,13 +269,15 @@ main() {
   echo -e "    ${CYAN}3)${NC} Gemini  ${DIM}(Google)${NC}"
   echo ""
 
-  if [ -t 0 ]; then
+  local llm_choice=""
+  if [ "$CAN_PROMPT" = true ]; then
     ask "Choose [1/2/3] (default: 1): "
-    read -r llm_choice
+    prompt_read llm_choice
   else
     llm_choice="1"
   fi
 
+  local LLM_PROVIDER KEY_PREFIX KEY_LABEL
   case "$llm_choice" in
     2) LLM_PROVIDER="openai";  KEY_PREFIX="sk-";      KEY_LABEL="OpenAI API Key" ;;
     3) LLM_PROVIDER="gemini";  KEY_PREFIX="AIza";     KEY_LABEL="Google Gemini API Key" ;;
@@ -260,9 +287,10 @@ main() {
   success "Provider: ${BOLD}$LLM_PROVIDER${NC}"
   echo ""
 
-  if [ -t 0 ]; then
+  local api_key=""
+  if [ "$CAN_PROMPT" = true ]; then
     ask "${KEY_LABEL} (${KEY_PREFIX}...): "
-    read -rs api_key
+    prompt_read api_key "-s"
     echo ""
 
     if [ -n "${api_key:-}" ]; then
@@ -271,7 +299,6 @@ main() {
       warn "No key entered — set it later in the app Settings"
     fi
   else
-    api_key=""
     warn "Non-interactive mode — set API key in the app Settings"
   fi
 
@@ -285,6 +312,7 @@ main() {
   step 3 "Installing dependencies (automatic)"
 
   # Node.js
+  local NODE_VERSION
   NODE_VERSION=$(get_node_version)
   if [ "$NODE_VERSION" -ge "$MIN_NODE_MAJOR" ] 2>/dev/null; then
     success "Node.js v$(node -v 2>/dev/null | sed 's/v//')"
@@ -303,7 +331,7 @@ main() {
   auto_install_pnpm
   check_command pnpm && success "pnpm $(pnpm -v 2>/dev/null)" || warn "pnpm not available"
 
-  # Redis (skip on Windows MSYS — not natively supported)
+  # Redis
   if [ "$OS" != "windows" ]; then
     if redis-cli ping &>/dev/null 2>&1; then
       success "Redis: running"
@@ -330,7 +358,7 @@ main() {
   # ═══════════════════════════════════════════════════
   step 4 "Installing MegaSloth Desktop App"
 
-  if [ -d "$MEGASLOTH_DIR" ]; then
+  if [ -d "$MEGASLOTH_DIR/.git" ]; then
     info "Updating existing installation..."
     cd "$MEGASLOTH_DIR"
     git pull origin main 2>/dev/null || {
@@ -341,6 +369,9 @@ main() {
       cd "$MEGASLOTH_DIR"
     }
   else
+    if [ -d "$MEGASLOTH_DIR" ]; then
+      rm -rf "$MEGASLOTH_DIR"
+    fi
     info "Downloading MegaSloth..."
     git clone --depth 1 "$MEGASLOTH_REPO" "$MEGASLOTH_DIR"
     cd "$MEGASLOTH_DIR"
@@ -397,12 +428,28 @@ ENVEOF
   if [ -d "desktop" ]; then
     cd desktop
     pnpm install 2>/dev/null || npm install
+
+    local BUILD_OK=false
     if [ "$OS" = "macos" ]; then
-      pnpm build:mac 2>/dev/null && success "Desktop app built (macOS)" || warn "Desktop build skipped — use CLI mode"
+      if pnpm build:mac 2>/dev/null; then
+        BUILD_OK=true
+        success "Desktop app built (macOS)"
+
+        local APP_SRC
+        APP_SRC=$(find release -name "MegaSloth.app" -type d 2>/dev/null | head -1)
+        if [ -n "$APP_SRC" ]; then
+          rm -rf /Applications/MegaSloth.app 2>/dev/null || true
+          cp -R "$APP_SRC" /Applications/
+          xattr -cr /Applications/MegaSloth.app 2>/dev/null || true
+          success "Installed to /Applications/MegaSloth.app"
+        fi
+      else
+        warn "Desktop build failed — use CLI mode"
+      fi
     elif [ "$OS" = "linux" ]; then
-      pnpm build:linux 2>/dev/null && success "Desktop app built (Linux)" || warn "Desktop build skipped — use CLI mode"
+      pnpm build:linux 2>/dev/null && BUILD_OK=true && success "Desktop app built (Linux)" || warn "Desktop build failed — use CLI mode"
     elif [ "$OS" = "windows" ]; then
-      pnpm build:win 2>/dev/null && success "Desktop app built (Windows)" || warn "Desktop build skipped — use CLI mode"
+      pnpm build:win 2>/dev/null && BUILD_OK=true && success "Desktop app built (Windows)" || warn "Desktop build failed — use CLI mode"
     fi
     cd "$MEGASLOTH_DIR"
   fi
@@ -412,6 +459,7 @@ ENVEOF
   # ═══════════════════════════════════════════════════
   step 5 "Finalizing"
 
+  local INSTALL_BIN
   if [ -w "/usr/local/bin" ]; then
     INSTALL_BIN="/usr/local/bin/megasloth"
   elif [ -d "$HOME/.local/bin" ]; then
@@ -440,21 +488,23 @@ case "${1:-}" in
   stop)
     [ -f ".megasloth/data/megasloth.pid" ] && kill "$(cat .megasloth/data/megasloth.pid)" 2>/dev/null && rm -f .megasloth/data/megasloth.pid && echo "  ✓ Stopped" || echo "  Not running" ;;
   app)
-    APP_PATH=""
-    if [ -d "desktop/release" ]; then
+    if [ "$(uname -s)" = "Darwin" ] && [ -d "/Applications/MegaSloth.app" ]; then
+      open /Applications/MegaSloth.app
+    elif [ -d "desktop/release" ]; then
       case "$(uname -s)" in
         Darwin)
           APP_PATH=$(find desktop/release -name "MegaSloth*.app" -type d 2>/dev/null | head -1)
-          [ -n "$APP_PATH" ] && open "$APP_PATH" ;;
+          [ -n "$APP_PATH" ] && open "$APP_PATH" || echo "  Desktop app not found" ;;
         MINGW*|MSYS*|CYGWIN*)
           APP_PATH=$(find desktop/release -name "MegaSloth*.exe" -type f 2>/dev/null | head -1)
-          [ -n "$APP_PATH" ] && start "" "$APP_PATH" ;;
+          [ -n "$APP_PATH" ] && start "" "$APP_PATH" || echo "  Desktop app not found" ;;
         *)
           APP_PATH=$(find desktop/release -name "MegaSloth*.AppImage" -type f 2>/dev/null | head -1)
-          [ -n "$APP_PATH" ] && "$APP_PATH" & ;;
+          [ -n "$APP_PATH" ] && "$APP_PATH" & || echo "  Desktop app not found" ;;
       esac
-    fi
-    if [ -z "$APP_PATH" ]; then echo "  Desktop app not built. Run: megasloth start"; fi ;;
+    else
+      echo "  Desktop app not built. Run: megasloth start"
+    fi ;;
   status)
     echo "  🦥 MegaSloth Status"
     echo "  Install: $MEGASLOTH_DIR"
@@ -466,7 +516,7 @@ case "${1:-}" in
   update) git pull origin main && pnpm install && pnpm build 2>/dev/null; echo "  ✓ Updated" ;;
   uninstall)
     echo -n "  Remove MegaSloth? [y/N]: "; read -r yn
-    case "$yn" in [yY]*) rm -rf "$MEGASLOTH_DIR" "SELF_PATH_PLACEHOLDER"; echo "  ✓ Uninstalled" ;; *) echo "  Cancelled" ;; esac ;;
+    case "$yn" in [yY]*) rm -rf "$MEGASLOTH_DIR" "SELF_PATH_PLACEHOLDER"; rm -rf /Applications/MegaSloth.app 2>/dev/null; echo "  ✓ Uninstalled" ;; *) echo "  Cancelled" ;; esac ;;
   help|--help|-h|"")
     echo ""
     echo "  #########+. *.   +*##############"
@@ -496,7 +546,7 @@ case "${1:-}" in
 esac
 WRAPPER
 
-  # Replace placeholders — portable sed for both GNU and BSD
+  # Replace placeholders
   if sed --version 2>/dev/null | grep -q GNU; then
     sed -i "s|INSTALL_DIR_PLACEHOLDER|$MEGASLOTH_DIR|g" "$INSTALL_BIN"
     sed -i "s|SELF_PATH_PLACEHOLDER|$INSTALL_BIN|g" "$INSTALL_BIN"
@@ -509,8 +559,8 @@ WRAPPER
 
   # Add to PATH if needed
   if ! echo "$PATH" | grep -q "$(dirname "$INSTALL_BIN")"; then
-    SHELL_RC=""
-    case "$SHELL" in
+    local SHELL_RC=""
+    case "${SHELL:-}" in
       */zsh)  SHELL_RC="$HOME/.zshrc" ;;
       */bash) SHELL_RC="$HOME/.bashrc" ;;
     esac
@@ -525,14 +575,20 @@ WRAPPER
   # ═══════════════════════════════════════════════════
   echo ""
   echo -e "  ${GREEN}${BOLD}══════════════════════════════════════════════════════${NC}"
-  echo -e "  ${GREEN}${BOLD}  🦥  MegaSloth Desktop App installed!${NC}"
+  echo -e "  ${GREEN}${BOLD}  🦥  MegaSloth installed successfully!${NC}"
   echo -e "  ${GREEN}${BOLD}══════════════════════════════════════════════════════${NC}"
   echo ""
   echo -e "  ${WHITE}Get started:${NC}"
   echo ""
-  echo -e "    ${CYAN}megasloth app${NC}      Launch desktop app"
-  echo -e "    ${CYAN}megasloth start${NC}    Start agent (CLI mode)"
-  echo -e "    ${CYAN}megasloth help${NC}     Show all commands"
+
+  if [ "$OS" = "macos" ] && [ -d "/Applications/MegaSloth.app" ]; then
+    echo -e "    ${CYAN}open -a MegaSloth${NC}   Launch desktop app"
+    echo -e "    ${CYAN}megasloth app${NC}       Launch desktop app (CLI)"
+  else
+    echo -e "    ${CYAN}megasloth app${NC}       Launch desktop app"
+  fi
+  echo -e "    ${CYAN}megasloth start${NC}     Start agent (CLI mode)"
+  echo -e "    ${CYAN}megasloth help${NC}      Show all commands"
   echo ""
   echo -e "  ${DIM}For CLI-only installation: npm install -g megasloth${NC}"
   echo -e "  ${WHITE}Docs:${NC} ${BLUE}https://github.com/stronghuni/MegaSloth${NC}"
