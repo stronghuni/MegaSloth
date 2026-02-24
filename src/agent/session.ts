@@ -333,14 +333,14 @@ export class AgentSession extends EventEmitter {
         });
       }
 
+      // Add assistant response to context
+      this.contextManager.addMessage('assistant', response.textContent, { turnId });
+
       // Handle tool calls if present
       if (response.toolUses && response.toolUses.length > 0) {
         await this.handleToolCalls(submissionId, response.toolUses);
         return; // Turn continues after tool execution
       }
-
-      // No tool calls - turn is complete
-      this.contextManager.addMessage('assistant', response.textContent, { turnId });
 
       // Ingest assistant response to graph memory
       if (this.deps.graphStore && this.deps.entityExtractor) {

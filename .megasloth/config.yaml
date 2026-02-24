@@ -1,4 +1,4 @@
-# MegaBot Configuration
+# MegaSloth Configuration
 # This file is optional - environment variables take precedence
 
 # Server configuration
@@ -13,10 +13,11 @@ logging:
   level: info    # trace, debug, info, warn, error, fatal
   pretty: true   # Enable pretty printing for development
 
-# Anthropic Claude configuration
-# anthropic:
-#   model: claude-sonnet-4-20250514
-#   maxTokens: 4096
+# LLM configuration
+# llm:
+#   provider: claude  # claude | openai | gemini
+#   model: claude-sonnet-4-6-20260217
+#   maxTokens: 8192
 
 # GitHub configuration
 # github:

@@ -103,16 +103,16 @@ MegaSloth is a **self-hosted AI agent** that monitors your Git repositories 24/7
 | GitLab | Full | Full | Full | Full | Full |
 | Bitbucket | Full | Partial | Full | Tags | Full |
 
-### Multi-Model LLM Support
+### Multi-Model LLM Support (2026 Latest)
 Choose your preferred AI provider — **bring your own API key**:
 
-| Provider | Default Model | Status |
-|----------|---------------|--------|
-| **Anthropic Claude** | claude-sonnet-4-6 | Supported |
-| **OpenAI** | gpt-5.2 | Supported |
-| **Google Gemini** | gemini-3.1-pro-preview | Supported |
+| Provider | Models | Default | Status |
+|----------|--------|---------|--------|
+| **Anthropic Claude** | Opus 4.6, Sonnet 4.6, Haiku 4.5 | claude-sonnet-4-6-20260217 | Supported |
+| **OpenAI** | GPT-5.2, GPT-5.2 Instant, GPT-5.3 Codex | gpt-5.2 | Supported |
+| **Google Gemini** | Gemini 3.1 Pro, Gemini 3.0 Flash | gemini-3.1-pro | Supported |
 
-### 84 Built-in Tools (9 Categories)
+### 105 Built-in Tools (9 Categories + Jenkins/K8s/Helm)
 
 MegaSloth is a **full automation agent** with tools spanning every layer of your system:
 
@@ -356,8 +356,8 @@ server:
 
 llm:
   provider: claude          # claude | openai | gemini
-  model: claude-sonnet-4-20250514
-  maxTokens: 4096
+  model: claude-sonnet-4-6-20260217
+  maxTokens: 8192
 
 github:
   token: ghp_xxxxx
@@ -396,7 +396,10 @@ logging:
 | `OPENAI_API_KEY` | OpenAI API key | — |
 | `GEMINI_API_KEY` | Google Gemini API key | — |
 | `LLM_MODEL` | Model name override | Provider default |
-| `LLM_MAX_TOKENS` | Max tokens per request | `4096` |
+| `LLM_MAX_TOKENS` | Max tokens per request | `8192` |
+| `JENKINS_URL` | Jenkins server URL | — |
+| `JENKINS_USER` | Jenkins username | `admin` |
+| `JENKINS_TOKEN` | Jenkins API token | — |
 | `HTTP_PORT` | HTTP API port | `13000` |
 | `WEBHOOK_PORT` | Webhook listener port | `3001` |
 | `WEBSOCKET_PORT` | WebSocket port | `18789` |

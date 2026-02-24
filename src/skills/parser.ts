@@ -7,6 +7,7 @@ export interface SkillTrigger {
   type: 'webhook' | 'cron' | 'manual';
   events?: string[];
   cron?: string;
+  schedule?: string;
   command?: string;
 }
 
@@ -72,6 +73,12 @@ export class SkillParser {
 
       if (!metadata.triggers || metadata.triggers.length === 0) {
         metadata.triggers = [{ type: 'manual' }];
+      }
+
+      for (const trigger of metadata.triggers) {
+        if (trigger.type === 'cron' && trigger.schedule && !trigger.cron) {
+          trigger.cron = trigger.schedule;
+        }
       }
 
       if (metadata.enabled === undefined) {

@@ -23,7 +23,7 @@ export const startCommand = new Command('start')
         });
         child.unref();
 
-        const pidFile = join(process.cwd(), '.megasloth', 'data', 'agent.pid');
+        const pidFile = join(process.cwd(), '.megasloth', 'data', 'megasloth.pid');
         writeFileSync(pidFile, String(child.pid), 'utf-8');
 
         success(`Agent started as daemon (PID: ${child.pid})`);

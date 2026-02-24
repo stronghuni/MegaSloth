@@ -18,15 +18,15 @@ export const redisConfigSchema = z.object({
 
 export const anthropicConfigSchema = z.object({
   apiKey: z.string(),
-  model: z.string().default('claude-sonnet-4-20250514'),
-  maxTokens: z.number().default(4096),
+  model: z.string().default('claude-sonnet-4-6'),
+  maxTokens: z.number().default(8192),
 });
 
 export const llmConfigSchema = z.object({
   provider: z.enum(['claude', 'openai', 'gemini']).default('claude'),
   apiKey: z.string(),
   model: z.string().optional(),
-  maxTokens: z.number().default(4096),
+  maxTokens: z.number().default(8192),
 });
 
 export const githubConfigSchema = z.object({

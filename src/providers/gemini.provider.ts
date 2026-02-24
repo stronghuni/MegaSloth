@@ -23,7 +23,7 @@ export class GeminiProvider implements LLMProvider {
   constructor(config: LLMProviderConfig) {
     this.client = new GoogleGenAI({ apiKey: config.apiKey });
     this.model = config.model || DEFAULT_MODELS.gemini!;
-    this.maxTokens = config.maxTokens ?? 4096;
+    this.maxTokens = config.maxTokens ?? 8192;
   }
 
   private convertToolsToDeclarations(tools?: ToolDefinition[]): GeminiTool[] | undefined {

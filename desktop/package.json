@@ -22,22 +22,32 @@
       "public/**/*"
     ],
     "mac": {
-      "target": ["dmg", "zip"],
-      "icon": "public/icon.png",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "public/icon.icns",
       "category": "public.app-category.developer-tools"
     },
     "win": {
-      "target": ["nsis", "portable"],
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "public/icon.png"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "icon": "public/icon.png",
       "category": "Development"
     }
   },
   "dependencies": {
-    "electron-store": "^10.0.0"
+    "electron-store": "^10.0.0",
+    "lucide-react": "^0.575.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

@@ -25,7 +25,7 @@ async function testLLMChat() {
   const config: LLMProviderConfig = {
     provider: 'claude',
     apiKey: ANTHROPIC_API_KEY,
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     maxTokens: 256,
   };
 
@@ -67,7 +67,7 @@ async function testLLMWithTools() {
   const config: LLMProviderConfig = {
     provider: 'claude',
     apiKey: ANTHROPIC_API_KEY,
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     maxTokens: 256,
   };
 
@@ -191,7 +191,7 @@ async function testFullAgentLoop() {
     const config: LLMProviderConfig = {
       provider: 'claude',
       apiKey: ANTHROPIC_API_KEY,
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       maxTokens: 1024,
     };
     const provider = createLLMProvider(config);

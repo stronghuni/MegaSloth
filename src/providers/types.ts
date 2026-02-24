@@ -71,5 +71,22 @@ export interface LLMProviderConfig {
 export const DEFAULT_MODELS = {
   claude: 'claude-sonnet-4-6',
   openai: 'gpt-5.2',
-  gemini: 'gemini-3.1-pro-preview',
+  gemini: 'gemini-3.1-pro',
+} as const;
+
+export const AVAILABLE_MODELS = {
+  claude: [
+    { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', tier: 'flagship' },
+    { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', tier: 'balanced' },
+    { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5', tier: 'fast' },
+  ],
+  openai: [
+    { id: 'gpt-5.2', name: 'GPT-5.2 Thinking', tier: 'flagship' },
+    { id: 'gpt-5.2-instant', name: 'GPT-5.2 Instant', tier: 'balanced' },
+    { id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', tier: 'coding' },
+  ],
+  gemini: [
+    { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro', tier: 'flagship' },
+    { id: 'gemini-3.0-flash', name: 'Gemini 3.0 Flash', tier: 'fast' },
+  ],
 } as const;

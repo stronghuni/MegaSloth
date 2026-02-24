@@ -88,6 +88,7 @@ async function registerExtendedTools(registry: ToolRegistry): Promise<void> {
   const { registerCredentialTools } = await import('./credential.tools.js');
   const { registerMemoryTools } = await import('./memory.tools.js');
   const { registerSessionTools } = await import('./session.tools.js');
+  const { registerCicdTools } = await import('./cicd.tools.js');
 
   registerShellTools(registry);
   registerFilesystemTools(registry);
@@ -97,6 +98,7 @@ async function registerExtendedTools(registry: ToolRegistry): Promise<void> {
   registerCredentialTools(registry);
   registerMemoryTools(registry);
   registerSessionTools(registry);
+  registerCicdTools(registry);
 }
 
 // Create and populate the default registry

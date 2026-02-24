@@ -23,7 +23,7 @@ export class OpenAIProvider implements LLMProvider {
   constructor(config: LLMProviderConfig) {
     this.client = new OpenAI({ apiKey: config.apiKey });
     this.model = config.model || DEFAULT_MODELS.openai!;
-    this.maxTokens = config.maxTokens ?? 4096;
+    this.maxTokens = config.maxTokens ?? 8192;
   }
 
   private convertToolsToFunctions(tools?: ToolDefinition[]): OpenAI.ChatCompletionTool[] | undefined {

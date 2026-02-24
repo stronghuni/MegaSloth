@@ -13,4 +13,16 @@ contextBridge.exposeInMainWorld('megasloth', {
   onCoreLog: (callback: (log: string) => void) => {
     ipcRenderer.on('core-log', (_, log) => callback(log));
   },
+  isOnboarded: () => ipcRenderer.invoke('is-onboarded'),
+  completeOnboarding: () => ipcRenderer.invoke('complete-onboarding'),
+  validateApiKey: (config: { provider: string; apiKey: string }) =>
+    ipcRenderer.invoke('validate-api-key', config),
+  saveApiConfig: (config: { provider: string; apiKey: string }) =>
+    ipcRenderer.invoke('save-api-config', config),
+  getLocalConfig: () => ipcRenderer.invoke('get-local-config'),
+  testProvider: (provider: string) =>
+    ipcRenderer.invoke('test-provider', provider),
+  getTheme: () => ipcRenderer.invoke('get-theme'),
+  setTheme: (theme: string) => ipcRenderer.invoke('set-theme', theme),
+  fetchRepositories: () => ipcRenderer.invoke('fetch-repositories'),
 });

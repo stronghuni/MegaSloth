@@ -22,7 +22,7 @@ export class ClaudeProvider implements LLMProvider {
   constructor(config: LLMProviderConfig) {
     this.client = new Anthropic({ apiKey: config.apiKey });
     this.model = config.model || DEFAULT_MODELS.claude!;
-    this.maxTokens = config.maxTokens ?? 4096;
+    this.maxTokens = config.maxTokens ?? 8192;
   }
 
   async chat(messages: Message[], options: ChatOptions = {}): Promise<LLMResponse> {

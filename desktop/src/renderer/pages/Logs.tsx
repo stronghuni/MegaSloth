@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { ScrollText, Trash2, ArrowDownToLine } from 'lucide-react';
 
 export function Logs() {
   const [logs, setLogs] = useState<string[]>([]);
@@ -24,29 +25,36 @@ export function Logs() {
   const clearLogs = () => setLogs([]);
 
   return (
-    <div className="space-y-4 h-full flex flex-col">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Logs</h2>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={autoScroll}
-              onChange={e => setAutoScroll(e.target.checked)}
-              className="rounded border-slate-600"
-            />
-            Auto-scroll
-          </label>
-          <button onClick={clearLogs} className="btn-secondary text-sm">Clear</button>
+    <div className="space-y-4 h-full flex flex-col px-3 sm:px-4 md:px-6 py-4 sm:py-6">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-lg sm:text-xl font-semibold text-white">Logs</h2>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">Agent output stream</p>
+        </div>
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <button
+            onClick={() => setAutoScroll(!autoScroll)}
+            className={`btn-ghost flex items-center gap-1 sm:gap-1.5 text-xs ${autoScroll ? 'text-emerald-400' : ''}`}
+          >
+            <ArrowDownToLine className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Auto-scroll</span>
+          </button>
+          <button onClick={clearLogs} className="btn-ghost flex items-center gap-1 sm:gap-1.5 text-xs">
+            <Trash2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Clear</span>
+          </button>
         </div>
       </div>
 
       <div
         ref={logRef}
-        className="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-4 overflow-y-auto font-mono text-xs leading-relaxed min-h-[400px]"
+        className="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-2 sm:p-4 overflow-x-auto overflow-y-auto font-mono text-[10px] sm:text-xs leading-relaxed min-h-[300px] sm:min-h-[400px]"
       >
         {logs.length === 0 ? (
-          <p className="text-slate-600">No logs yet. Start the agent to see output.</p>
+          <div className="flex flex-col items-center justify-center h-full text-slate-600">
+            <ScrollText className="w-6 h-6 mb-2" />
+            <p>No logs yet. Start the agent to see output.</p>
+          </div>
         ) : (
           logs.map((line, i) => (
             <div key={i} className="py-0.5 hover:bg-slate-900/50">

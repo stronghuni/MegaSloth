@@ -37,6 +37,18 @@ function loadYamlConfig(): Record<string, unknown> {
   }
 }
 
+function resolveProviderApiKey(provider?: string): string | undefined {
+  const providerKeyMap: Record<string, string | undefined> = {
+    claude: process.env.ANTHROPIC_API_KEY,
+    openai: process.env.OPENAI_API_KEY,
+    gemini: process.env.GEMINI_API_KEY,
+  };
+  if (provider && providerKeyMap[provider]) {
+    return providerKeyMap[provider];
+  }
+  return process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY;
+}
+
 function loadEnvConfig(): Record<string, unknown> {
   return {
     server: {
@@ -58,7 +70,7 @@ function loadEnvConfig(): Record<string, unknown> {
     },
     llm: {
       provider: process.env.LLM_PROVIDER as 'claude' | 'openai' | 'gemini' | undefined,
-      apiKey: process.env.LLM_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY,
+      apiKey: process.env.LLM_API_KEY || resolveProviderApiKey(process.env.LLM_PROVIDER),
       model: process.env.LLM_MODEL,
       maxTokens: process.env.LLM_MAX_TOKENS ? parseInt(process.env.LLM_MAX_TOKENS, 10) : undefined,
     },
