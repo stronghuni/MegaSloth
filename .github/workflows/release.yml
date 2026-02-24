@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   build-mac:
+    name: macOS (Universal)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,50 +25,25 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
-      - name: Build desktop (macOS)
+      - name: Build desktop (macOS universal — x64 + arm64)
         working-directory: desktop
         run: |
           pnpm install --frozen-lockfile
-          pnpm build:mac
+          pnpm build
+          npx electron-builder --mac --universal
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - uses: actions/upload-artifact@v4
         with:
-          name: mac-arm64
-          path: |
-            desktop/release/*.dmg
-            desktop/release/*.zip
-          if-no-files-found: error
-
-  build-mac-intel:
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: latest
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-
-      - name: Build desktop (macOS Intel)
-        working-directory: desktop
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm build:mac
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: mac-x64
+          name: mac-universal
           path: |
             desktop/release/*.dmg
             desktop/release/*.zip
           if-no-files-found: error
 
   build-windows:
+    name: Windows (x64 + arm64)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -82,20 +58,21 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
-      - name: Build desktop (Windows)
+      - name: Build desktop (Windows x64 + arm64)
         working-directory: desktop
         run: |
           pnpm install --frozen-lockfile
-          pnpm run build:win
+          pnpm build
+          npx electron-builder --win --x64 --arm64
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: |
-            desktop/release/*.exe
+          path: desktop/release/*.exe
           if-no-files-found: error
 
-  build-linux:
+  build-linux-x64:
+    name: Linux (x64)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -110,22 +87,55 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
-      - name: Build desktop (Linux)
+      - name: Build desktop (Linux x64)
         working-directory: desktop
         run: |
           pnpm install --frozen-lockfile
-          pnpm run build:linux
+          pnpm build
+          npx electron-builder --linux --x64
 
       - uses: actions/upload-artifact@v4
         with:
-          name: linux
+          name: linux-x64
+          path: |
+            desktop/release/*.AppImage
+            desktop/release/*.deb
+          if-no-files-found: error
+
+  build-linux-arm64:
+    name: Linux (arm64)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: Build desktop (Linux arm64)
+        working-directory: desktop
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          npx electron-builder --linux --arm64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64
           path: |
             desktop/release/*.AppImage
             desktop/release/*.deb
           if-no-files-found: error
 
   release:
-    needs: [build-mac, build-mac-intel, build-windows, build-linux]
+    name: Publish Release
+    needs: [build-mac, build-windows, build-linux-x64, build-linux-arm64]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
@@ -135,7 +145,7 @@ jobs:
           merge-multiple: true
 
       - name: List artifacts
-        run: find artifacts -type f | head -30
+        run: find artifacts -type f | sort
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

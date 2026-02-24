@@ -23,28 +23,35 @@
     ],
     "mac": {
       "target": [
-        "dmg",
-        "zip"
+        { "target": "dmg", "arch": ["universal"] },
+        { "target": "zip", "arch": ["universal"] }
       ],
       "icon": "public/icon.icns",
       "category": "public.app-category.developer-tools",
-      "artifactName": "MegaSloth-${arch}.${ext}"
+      "artifactName": "MegaSloth-mac-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
     },
     "win": {
       "target": [
-        "nsis"
+        { "target": "nsis", "arch": ["x64", "arm64"] }
       ],
       "icon": "public/icon.png",
-      "artifactName": "MegaSloth-Setup.${ext}"
+      "artifactName": "MegaSloth-win-${arch}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
     },
     "linux": {
       "target": [
-        "AppImage",
-        "deb"
+        { "target": "AppImage", "arch": ["x64", "arm64"] },
+        { "target": "deb", "arch": ["x64", "arm64"] }
       ],
       "icon": "public/icon.png",
       "category": "Development",
-      "artifactName": "MegaSloth.${ext}"
+      "artifactName": "MegaSloth-linux-${arch}.${ext}"
     }
   },
   "dependencies": {

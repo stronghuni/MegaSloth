@@ -343,10 +343,10 @@ ensure_pnpm() {
 # Platform-specific installers (pre-built binary)
 # ─────────────────────────────────────────────────────
 install_macos() {
-  local dmg_name="MegaSloth-${ARCH}.dmg"
+  local dmg_name="MegaSloth-mac-universal.dmg"
   local dmg_path="/tmp/$dmg_name"
 
-  info "Downloading MegaSloth for macOS ($ARCH)..."
+  info "Downloading MegaSloth for macOS (universal — Intel + Apple Silicon)..."
   download_file "${GITHUB_DL}/${dmg_name}" "$dmg_path"
 
   info "Installing..."
@@ -377,11 +377,16 @@ install_macos() {
 }
 
 install_linux() {
-  local appimage_name="MegaSloth.AppImage"
+  local arch_label="x64"
+  case "$ARCH" in
+    arm64) arch_label="arm64" ;;
+  esac
+
+  local appimage_name="MegaSloth-linux-${arch_label}.AppImage"
   local install_dir="$HOME/.local/bin"
   mkdir -p "$install_dir"
 
-  info "Downloading MegaSloth for Linux..."
+  info "Downloading MegaSloth for Linux ($arch_label)..."
   download_file "${GITHUB_DL}/${appimage_name}" "$install_dir/$appimage_name"
   chmod +x "$install_dir/$appimage_name"
 
@@ -392,10 +397,15 @@ install_linux() {
 }
 
 install_windows() {
-  local exe_name="MegaSloth-Setup.exe"
+  local arch_label="x64"
+  case "$ARCH" in
+    arm64) arch_label="arm64" ;;
+  esac
+
+  local exe_name="MegaSloth-win-${arch_label}-Setup.exe"
   local exe_path="$USERPROFILE/Downloads/$exe_name"
 
-  info "Downloading MegaSloth for Windows..."
+  info "Downloading MegaSloth for Windows ($arch_label)..."
   download_file "${GITHUB_DL}/${exe_name}" "$exe_path"
 
   success "Downloaded to $exe_path"
