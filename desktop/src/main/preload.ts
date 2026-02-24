@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('megasloth', {
   completeOnboarding: () => ipcRenderer.invoke('complete-onboarding'),
   validateApiKey: (config: { provider: string; apiKey: string }) =>
     ipcRenderer.invoke('validate-api-key', config),
+  switchProvider: (provider: string) =>
+    ipcRenderer.invoke('switch-provider', provider),
   saveApiConfig: (config: { provider: string; apiKey: string }) =>
     ipcRenderer.invoke('save-api-config', config),
   getLocalConfig: () => ipcRenderer.invoke('get-local-config'),
@@ -25,6 +27,39 @@ contextBridge.exposeInMainWorld('megasloth', {
   getTheme: () => ipcRenderer.invoke('get-theme'),
   setTheme: (theme: string) => ipcRenderer.invoke('set-theme', theme),
   fetchRepositories: () => ipcRenderer.invoke('fetch-repositories'),
+
+  validateGitToken: (config: { platform: string; token: string }) =>
+    ipcRenderer.invoke('validate-git-token', config),
+  saveGitToken: (config: { platform: string; token: string }) =>
+    ipcRenderer.invoke('save-git-token', config),
+  removeGitToken: (config: { platform: string }) =>
+    ipcRenderer.invoke('remove-git-token', config),
+  getGitUsers: () => ipcRenderer.invoke('get-git-users'),
+  openGitTokenPage: (platform: string) =>
+    ipcRenderer.invoke('open-git-token-page', platform),
+
+  scanLocalRepos: () => ipcRenderer.invoke('scan-local-repos'),
+  detectGhCli: () => ipcRenderer.invoke('detect-gh-cli'),
+  importGhToken: () => ipcRenderer.invoke('import-gh-token'),
+  githubOAuthStart: (config: { clientId: string }) =>
+    ipcRenderer.invoke('github-oauth-start', config),
+  githubOAuthPoll: (config: { clientId: string }) =>
+    ipcRenderer.invoke('github-oauth-poll', config),
+  githubOAuthCancel: () => ipcRenderer.invoke('github-oauth-cancel'),
+
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  dismissUpdate: () => ipcRenderer.invoke('dismiss-update'),
+  onUpdateAvailable: (cb: (info: {
+    currentVersion: string; latestVersion: string; releaseName: string;
+    releaseUrl: string; downloadUrl: string; releaseNotes: string;
+  }) => void) => {
+    const handler = (_: unknown, info: {
+      currentVersion: string; latestVersion: string; releaseName: string;
+      releaseUrl: string; downloadUrl: string; releaseNotes: string;
+    }) => cb(info);
+    ipcRenderer.on('update-available', handler);
+    return () => ipcRenderer.removeListener('update-available', handler);
+  },
 
   chatStream: (message: string) => ipcRenderer.invoke('chat-stream', message),
   loadChatHistory: () => ipcRenderer.invoke('load-chat-history'),

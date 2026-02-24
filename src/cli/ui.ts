@@ -104,5 +104,5 @@ export function hint(msg: string): void {
 }
 
 export function cmd(command: string, desc: string): void {
-  console.log(`  ${c.cyan}${command.padEnd(22)}${c.reset}${c.dim}${desc}${c.reset}`);
+  console.log(`  ${c.cyan}${command.padEnd(28)}${c.reset}${c.dim}${desc}${c.reset}`);
 }

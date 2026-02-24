@@ -104,7 +104,7 @@ export class OpenAIProvider implements LLMProvider {
 
     const response = await this.client.chat.completions.create({
       model: this.model,
-      max_tokens: options.maxTokens || this.maxTokens,
+      max_completion_tokens: options.maxTokens || this.maxTokens,
       messages: this.convertMessages(messages, options.system),
       tools: this.convertToolsToFunctions(options.tools),
       temperature: options.temperature,
@@ -170,7 +170,7 @@ export class OpenAIProvider implements LLMProvider {
   async streamChat(messages: Message[], options: StreamChatOptions = {}): Promise<LLMResponse> {
     const stream = await this.client.chat.completions.create({
       model: this.model,
-      max_tokens: options.maxTokens || this.maxTokens,
+      max_completion_tokens: options.maxTokens || this.maxTokens,
       messages: this.convertMessages(messages, options.system),
       tools: this.convertToolsToFunctions(options.tools),
       temperature: options.temperature,

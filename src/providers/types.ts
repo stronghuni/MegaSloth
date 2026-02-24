@@ -71,7 +71,7 @@ export interface LLMProviderConfig {
 export const DEFAULT_MODELS = {
   claude: 'claude-sonnet-4-6',
   openai: 'gpt-5.2',
-  gemini: 'gemini-3.1-pro',
+  gemini: 'gemini-2.5-pro',
 } as const;
 
 export const AVAILABLE_MODELS = {
@@ -86,7 +86,7 @@ export const AVAILABLE_MODELS = {
     { id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', tier: 'coding' },
   ],
   gemini: [
-    { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro', tier: 'flagship' },
-    { id: 'gemini-3.0-flash', name: 'Gemini 3.0 Flash', tier: 'fast' },
+    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', tier: 'flagship' },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', tier: 'fast' },
   ],
 } as const;

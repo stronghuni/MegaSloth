@@ -1,10 +1,13 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
 import { type ServerConfig } from '../config/schema.js';
 import { type MetadataStore } from '../storage/metadata.store.js';
 import { type CacheStore } from '../storage/cache.store.js';
 import { type LLMProvider, type Message } from '../providers/types.js';
+import { AgentCore, type AgentCoreDeps, type ChatTask, type AgentEventCallbacks } from '../agent/core.js';
+import { type GitAdapterConfigs } from '../adapters/git/index.js';
 import { getLogger } from '../utils/logger.js';
+import { randomUUID } from 'node:crypto';
 
 export interface HttpServerDeps {
   config: ServerConfig;
@@ -18,6 +21,8 @@ export class HttpServer {
   private deps: HttpServerDeps;
   private chatHistory: Message[] = [];
   private chatProvider: LLMProvider | null = null;
+  private agentCore: AgentCore | null = null;
+  private chatSessions: Map<string, string> = new Map();
 
   constructor(deps: HttpServerDeps) {
     this.deps = deps;
@@ -42,6 +47,39 @@ export class HttpServer {
       maxTokens: config.llm?.maxTokens,
     });
     return this.chatProvider;
+  }
+
+  private async getAgentCore(): Promise<AgentCore> {
+    if (this.agentCore) return this.agentCore;
+
+    const { loadConfig } = await import('../config/index.js');
+    const config = loadConfig();
+    const apiKey = config.llm?.apiKey || config.anthropic?.apiKey;
+    if (!apiKey) throw new Error('No LLM API key configured.');
+
+    await import('../adapters/git/index.js');
+    const gitConfigs: Record<string, unknown> = {};
+    if (config.github?.token) gitConfigs.github = { token: config.github.token };
+    if (config.gitlab?.token) gitConfigs.gitlab = { token: config.gitlab.token, url: config.gitlab.url };
+    if (config.bitbucket?.username) gitConfigs.bitbucket = { username: config.bitbucket.username, appPassword: config.bitbucket.appPassword };
+
+    const deps: AgentCoreDeps = {
+      llmConfig: {
+        provider: config.llm?.provider || 'claude',
+        apiKey,
+        model: config.llm?.model,
+        maxTokens: config.llm?.maxTokens,
+      },
+      gitAdapterConfigs: gitConfigs as unknown as GitAdapterConfigs,
+      metadataStore: this.deps.metadataStore,
+    };
+
+    this.agentCore = new AgentCore(deps);
+    return this.agentCore;
+  }
+
+  private sendSSE(reply: FastifyReply, event: string, data: unknown): void {
+    reply.raw.write(`data: ${JSON.stringify({ type: event, ...data as object })}\n\n`);
   }
 
   private async setupMiddleware(): Promise<void> {
@@ -181,45 +219,195 @@ export class HttpServer {
       };
     });
 
-    // ── Chat ──
+    // ── Chat (SSE Streaming + Agent Loop) ──
 
-    this.server.post<{ Body: { message: string } }>('/api/chat', async (request, reply) => {
-      const { message } = request.body;
-      if (!message?.trim()) {
-        return reply.status(400).send({ error: 'Message is required' });
+    this.server.post<{ Body: { message: string; sessionId?: string; stream?: boolean } }>(
+      '/api/chat',
+      async (request, reply) => {
+        const { message, sessionId: clientSessionId, stream = true } = request.body;
+        if (!message?.trim()) {
+          return reply.status(400).send({ error: 'Message is required' });
+        }
+
+        const sessionId = clientSessionId || this.getOrCreateSession(request.ip || 'default');
+
+        if (!stream) {
+          return this.handleNonStreamingChat(message, reply);
+        }
+
+        try {
+          const agent = await this.getAgentCore();
+
+          reply.raw.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Session-Id': sessionId,
+          });
+
+          const callbacks: AgentEventCallbacks = {
+            onTextDelta: (text) => this.sendSSE(reply, 'text_delta', { text }),
+            onToolStart: (tool, input) => this.sendSSE(reply, 'tool_start', { tool, input }),
+            onToolDone: (tool, result, durationMs, isError) =>
+              this.sendSSE(reply, 'tool_done', { tool, result, durationMs, isError }),
+            onToolBlocked: (tool, reason) => this.sendSSE(reply, 'tool_blocked', { tool, reason }),
+            onTurnComplete: (turn, tokenUsage) =>
+              this.sendSSE(reply, 'turn_complete', { turn, usage: tokenUsage }),
+            onError: (error) => this.sendSSE(reply, 'error', { error }),
+            onDone: (result) => {
+              this.sendSSE(reply, 'done', {
+                response: result.response,
+                toolsExecuted: result.toolsExecuted,
+                turns: result.turns,
+                usage: result.tokensUsed,
+              });
+              reply.raw.end();
+            },
+          };
+
+          const chatTask: ChatTask = {
+            sessionId,
+            message,
+            toolCategories: ['shell', 'filesystem', 'code', 'git', 'web', 'memory'],
+          };
+
+          await agent.executeChatTask(chatTask, callbacks);
+          return;
+        } catch (error) {
+          this.logger.error({ error }, 'SSE Chat request failed');
+          const errorMsg = error instanceof Error ? error.message : 'Chat failed';
+          try {
+            this.sendSSE(reply, 'error', { error: errorMsg });
+            reply.raw.end();
+            return;
+          } catch {
+            return reply.status(500).send({ error: errorMsg });
+          }
+        }
       }
+    );
 
-      try {
-        const provider = await this.getChatProvider();
-        this.chatHistory.push({ role: 'user', content: message });
-
-        const maxHistory = 30;
-        const historySlice = this.chatHistory.slice(-maxHistory);
-
-        const response = await provider.chat(historySlice, {
-          system: 'You are MegaSloth, an AI-powered repository operations agent. Be concise and helpful.',
-          maxTokens: 4096,
-        });
-
-        this.chatHistory.push({ role: 'assistant', content: response.textContent });
-
-        return {
-          response: response.textContent,
-          toolsUsed: response.toolUses.map(t => t.name),
-          usage: response.usage,
-        };
-      } catch (error) {
-        this.logger.error({ error }, 'Chat request failed');
-        return reply.status(500).send({
-          error: error instanceof Error ? error.message : 'Chat failed',
-        });
+    this.server.delete<{ Body?: { sessionId?: string } }>('/api/chat', async (request) => {
+      const sessionId = (request.body as { sessionId?: string } | undefined)?.sessionId;
+      if (sessionId) {
+        try {
+          const agent = await this.getAgentCore();
+          await agent.clearChatSession(sessionId);
+        } catch { /* ignore */ }
       }
-    });
-
-    this.server.delete('/api/chat', async () => {
       this.chatHistory = [];
       return { message: 'Chat history cleared' };
     });
+
+    this.server.post<{ Body: { sessionId: string } }>('/api/chat/compact', async (request, reply) => {
+      const { sessionId } = request.body;
+      if (!sessionId) {
+        return reply.status(400).send({ error: 'sessionId is required' });
+      }
+      try {
+        const agent = await this.getAgentCore();
+        const llm = agent.getLLMProvider();
+        const { ContextManager } = await import('../agent/context-manager.js');
+        const ctxManager = new ContextManager(this.deps.metadataStore);
+        const result = await ctxManager.compactContext(
+          { contextKey: `chat:${sessionId}`, maxMessages: 100, expirationHours: 48 },
+          llm
+        );
+        if (!result) {
+          return { message: 'Nothing to compact', compacted: false };
+        }
+        return { message: 'Context compacted', compacted: true, ...result };
+      } catch (error) {
+        return reply.status(500).send({ error: error instanceof Error ? error.message : 'Compaction failed' });
+      }
+    });
+
+    // ── Skill execution from chat ──
+
+    this.server.post<{ Body: { skill: string; owner?: string; repo?: string; prNumber?: number } }>(
+      '/api/chat/skill',
+      async (request, reply) => {
+        const { skill, owner, repo, prNumber } = request.body;
+        if (!skill) {
+          return reply.status(400).send({ error: 'skill name is required' });
+        }
+
+        try {
+          const { SkillRegistry } = await import('../skills/registry.js');
+          const { join } = await import('node:path');
+
+          const registry = new SkillRegistry();
+
+          const builtinDir = join(process.cwd(), 'src', 'skills', 'builtin');
+          const customDir = join(process.cwd(), '.megasloth', 'skills');
+          registry.loadFromDirectory(builtinDir);
+          registry.loadFromDirectory(customDir);
+
+          const found = registry.get(skill);
+          if (!found) {
+            const available = registry.listSkills().map(s => s.name);
+            return reply.status(404).send({
+              error: `Skill "${skill}" not found`,
+              available,
+            });
+          }
+
+          if (!owner || !repo) {
+            return reply.status(400).send({
+              error: 'owner and repo are required for skill execution',
+              skill: found.metadata.name,
+              description: found.metadata.description,
+            });
+          }
+
+          const agent = await this.getAgentCore();
+          const providers = agent.listProviders();
+          const provider = providers[0];
+          if (!provider) {
+            return reply.status(400).send({ error: 'No Git provider configured' });
+          }
+
+          reply.raw.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          });
+
+          this.sendSSE(reply, 'skill_start', { skill: found.metadata.name, description: found.metadata.description });
+
+          const { SkillEngine } = await import('../skills/engine.js');
+          const engine = new SkillEngine(agent, this.deps.metadataStore);
+          engine.getRegistry().loadFromDirectory(builtinDir);
+          engine.getRegistry().loadFromDirectory(customDir);
+
+          const result = await engine.executeSkill(found, {
+            provider,
+            owner,
+            repo,
+            prNumber,
+            eventType: 'manual',
+          });
+
+          this.sendSSE(reply, 'skill_done', {
+            skill: found.metadata.name,
+            success: result.success,
+            response: result.response,
+            toolsExecuted: result.toolsExecuted,
+            turns: result.turns,
+            usage: result.tokensUsed,
+          });
+          reply.raw.end();
+        } catch (error) {
+          this.logger.error({ error, skill }, 'Skill execution failed');
+          try {
+            this.sendSSE(reply, 'error', { error: error instanceof Error ? error.message : 'Skill execution failed' });
+            reply.raw.end();
+          } catch {
+            return reply.status(500).send({ error: 'Skill execution failed' });
+          }
+        }
+      }
+    );
 
     // ── Config CRUD ──
 
@@ -345,10 +533,11 @@ export class HttpServer {
     // ── Providers ──
 
     this.server.get('/api/providers', async () => {
+      const { AVAILABLE_MODELS } = await import('../providers/types.js');
       const providers = [
-        { name: 'claude', displayName: 'Anthropic Claude', models: ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'], configured: !!process.env.ANTHROPIC_API_KEY },
-        { name: 'openai', displayName: 'OpenAI', models: ['gpt-5.2', 'gpt-5.2-instant', 'gpt-5.3-codex'], configured: !!process.env.OPENAI_API_KEY },
-        { name: 'gemini', displayName: 'Google Gemini', models: ['gemini-3.1-pro', 'gemini-3.0-flash'], configured: !!process.env.GEMINI_API_KEY },
+        { name: 'claude', displayName: 'Anthropic Claude', models: AVAILABLE_MODELS.claude.map(m => m.id), configured: !!process.env.ANTHROPIC_API_KEY },
+        { name: 'openai', displayName: 'OpenAI', models: AVAILABLE_MODELS.openai.map(m => m.id), configured: !!process.env.OPENAI_API_KEY },
+        { name: 'gemini', displayName: 'Google Gemini', models: AVAILABLE_MODELS.gemini.map(m => m.id), configured: !!process.env.GEMINI_API_KEY },
       ];
       const active = process.env.LLM_PROVIDER || 'claude';
       return { providers, active };
@@ -385,6 +574,35 @@ export class HttpServer {
       }
       return reply.status(200).send({ message: 'Repository removed', repository: repo });
     });
+  }
+
+  private getOrCreateSession(clientId: string): string {
+    const existing = this.chatSessions.get(clientId);
+    if (existing) return existing;
+    const sessionId = randomUUID();
+    this.chatSessions.set(clientId, sessionId);
+    return sessionId;
+  }
+
+  private async handleNonStreamingChat(message: string, reply: FastifyReply): Promise<unknown> {
+    try {
+      const provider = await this.getChatProvider();
+      this.chatHistory.push({ role: 'user', content: message });
+      const historySlice = this.chatHistory.slice(-30);
+      const response = await provider.chat(historySlice, {
+        system: 'You are MegaSloth, an AI-powered repository operations agent. Be concise and helpful.',
+        maxTokens: 4096,
+      });
+      this.chatHistory.push({ role: 'assistant', content: response.textContent });
+      return {
+        response: response.textContent,
+        toolsUsed: response.toolUses.map(t => t.name),
+        usage: response.usage,
+      };
+    } catch (error) {
+      this.logger.error({ error }, 'Non-streaming chat failed');
+      return reply.status(500).send({ error: error instanceof Error ? error.message : 'Chat failed' });
+    }
   }
 
   async start(): Promise<void> {

@@ -179,14 +179,13 @@ export async function createMegaSloth(): Promise<MegaSloth> {
   };
 }
 
-// Main entry point
+// Main entry point - only runs when executed directly, not when imported
 async function main(): Promise<void> {
   const logger = getLogger('main');
 
   try {
     const bot = await createMegaSloth();
 
-    // Handle graceful shutdown
     const shutdown = async (signal: string) => {
       logger.info({ signal }, 'Received shutdown signal');
       await bot.stop();
@@ -203,4 +202,8 @@ async function main(): Promise<void> {
   }
 }
 
-main();
+import { fileURLToPath } from 'node:url';
+const isDirectRun = process.argv[1] === fileURLToPath(import.meta.url);
+if (isDirectRun || process.env.MEGASLOTH_DAEMON === 'true') {
+  main();
+}

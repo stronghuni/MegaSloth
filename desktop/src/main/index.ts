@@ -290,6 +290,22 @@ ipcMain.handle('validate-api-key', async (_, { provider, apiKey }: { provider: s
   }
 });
 
+ipcMain.handle('switch-provider', async (_, provider: string) => {
+  const projectRoot = getProjectRoot();
+  const envPath = join(projectRoot, '.env');
+  if (!existsSync(envPath)) return false;
+
+  let envContent = readFileSync(envPath, 'utf-8');
+  const regex = /^LLM_PROVIDER=.*$/m;
+  if (regex.test(envContent)) {
+    envContent = envContent.replace(regex, `LLM_PROVIDER=${provider}`);
+  } else {
+    envContent += `\nLLM_PROVIDER=${provider}`;
+  }
+  writeFileSync(envPath, envContent.trim() + '\n');
+  return true;
+});
+
 ipcMain.handle('save-api-config', async (_, { provider, apiKey }: { provider: string; apiKey: string }) => {
   const projectRoot = getProjectRoot();
   mkdirSync(projectRoot, { recursive: true });
@@ -431,6 +447,388 @@ ipcMain.handle('test-provider', async (_, provider: string) => {
   }
 });
 
+// ── Git Token Management ────────────────────────────────────────
+
+const GIT_TOKEN_CREATE_URLS: Record<string, string> = {
+  github: 'https://github.com/settings/tokens/new?scopes=repo,read:org,workflow,read:user&description=MegaSloth%20Agent',
+  gitlab: 'https://gitlab.com/-/user_settings/personal_access_tokens?name=MegaSloth&scopes=api,read_repository,write_repository',
+  bitbucket: 'https://bitbucket.org/account/settings/app-passwords/',
+};
+
+const GIT_TOKEN_ENV_KEYS: Record<string, string> = {
+  github: 'GITHUB_TOKEN',
+  gitlab: 'GITLAB_TOKEN',
+  bitbucket: 'BITBUCKET_TOKEN',
+};
+
+// ── Local Git Repo Discovery ────────────────────────────────────
+
+interface LocalRepo {
+  path: string;
+  remotes: Array<{ name: string; url: string; platform: string }>;
+}
+
+function detectPlatform(url: string): string {
+  if (url.includes('github.com')) return 'github';
+  if (url.includes('gitlab.com') || url.includes('gitlab')) return 'gitlab';
+  if (url.includes('bitbucket.org') || url.includes('bitbucket')) return 'bitbucket';
+  return 'unknown';
+}
+
+function parseGitConfig(configPath: string): Array<{ name: string; url: string; platform: string }> {
+  if (!existsSync(configPath)) return [];
+  const content = readFileSync(configPath, 'utf-8');
+  const remotes: Array<{ name: string; url: string; platform: string }> = [];
+  const remoteRegex = /\[remote "([^"]+)"\][^[]*?url\s*=\s*(.+)/g;
+  let match;
+  while ((match = remoteRegex.exec(content)) !== null) {
+    const name = match[1].trim();
+    const url = match[2].trim();
+    remotes.push({ name, url, platform: detectPlatform(url) });
+  }
+  return remotes;
+}
+
+function scanForGitRepos(baseDirs: string[], maxDepth = 3): LocalRepo[] {
+  const repos: LocalRepo[] = [];
+  const visited = new Set<string>();
+
+  function walk(dir: string, depth: number) {
+    if (depth > maxDepth || visited.has(dir)) return;
+    visited.add(dir);
+
+    const gitDir = join(dir, '.git');
+    if (existsSync(join(gitDir, 'config'))) {
+      const remotes = parseGitConfig(join(gitDir, 'config'));
+      if (remotes.length > 0) {
+        repos.push({ path: dir, remotes });
+      }
+      return;
+    }
+
+    try {
+      const entries = readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'Library' || entry.name === 'Applications') continue;
+        walk(join(dir, entry.name), depth + 1);
+      }
+    } catch {}
+  }
+
+  for (const base of baseDirs) {
+    if (existsSync(base)) walk(base, 0);
+  }
+  return repos;
+}
+
+ipcMain.handle('scan-local-repos', async () => {
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  const baseDirs = [
+    join(home, 'Desktop'),
+    join(home, 'Documents'),
+    join(home, 'Projects'),
+    join(home, 'projects'),
+    join(home, 'repos'),
+    join(home, 'dev'),
+    join(home, 'src'),
+    join(home, 'workspace'),
+    join(home, 'code'),
+    getProjectRoot(),
+  ].filter(d => existsSync(d));
+
+  const repos = scanForGitRepos(baseDirs);
+  const platforms = new Set<string>();
+  for (const repo of repos) {
+    for (const remote of repo.remotes) {
+      if (remote.platform !== 'unknown') platforms.add(remote.platform);
+    }
+  }
+  return { repos, platforms: Array.from(platforms) };
+});
+
+// ── gh CLI Integration ──────────────────────────────────────────
+
+ipcMain.handle('detect-gh-cli', async () => {
+  try {
+    const { stdout: statusOut } = await execAsync('gh auth status 2>&1', { timeout: 10000 });
+    const loggedIn = statusOut.includes('Logged in') || statusOut.includes('✓');
+    if (!loggedIn) return { installed: true, authenticated: false };
+
+    const { stdout: tokenOut } = await execAsync('gh auth token 2>&1', { timeout: 5000 });
+    const token = tokenOut.trim();
+    if (!token || token.length < 10) return { installed: true, authenticated: false };
+
+    const validation = await validateGitToken('github', token);
+    return {
+      installed: true,
+      authenticated: true,
+      token,
+      user: validation.user || null,
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : '';
+    if (msg.includes('not found') || msg.includes('command not found') || msg.includes('ENOENT')) {
+      return { installed: false, authenticated: false };
+    }
+    return { installed: true, authenticated: false };
+  }
+});
+
+ipcMain.handle('import-gh-token', async () => {
+  try {
+    const { stdout } = await execAsync('gh auth token 2>&1', { timeout: 5000 });
+    const token = stdout.trim();
+    if (!token || token.length < 10) return { ok: false, error: 'No token from gh CLI' };
+
+    const validation = await validateGitToken('github', token);
+    if (!validation.valid) return { ok: false, error: validation.error };
+
+    const projectRoot = getProjectRoot();
+    mkdirSync(projectRoot, { recursive: true });
+    const envPath = join(projectRoot, '.env');
+    let envContent = existsSync(envPath) ? readFileSync(envPath, 'utf-8') : '';
+    const regex = /^GITHUB_TOKEN=.*$/m;
+    if (regex.test(envContent)) {
+      envContent = envContent.replace(regex, `GITHUB_TOKEN=${token}`);
+    } else {
+      envContent += `\nGITHUB_TOKEN=${token}`;
+    }
+    writeFileSync(envPath, envContent.trim() + '\n');
+    return { ok: true, user: validation.user };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Failed to import token' };
+  }
+});
+
+// ── GitHub OAuth Device Flow ────────────────────────────────────
+
+let deviceFlowState: {
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  expiresAt: number;
+  interval: number;
+  polling: boolean;
+} | null = null;
+
+ipcMain.handle('github-oauth-start', async (_, { clientId }: { clientId: string }) => {
+  try {
+    const res = await fetch('https://github.com/login/device/code', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: clientId, scope: 'repo read:org workflow read:user' }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) {
+      const e = await res.text();
+      return { ok: false, error: `GitHub returned ${res.status}: ${e}` };
+    }
+    const data = await res.json() as {
+      device_code: string; user_code: string; verification_uri: string;
+      expires_in: number; interval: number;
+    };
+
+    deviceFlowState = {
+      deviceCode: data.device_code,
+      userCode: data.user_code,
+      verificationUri: data.verification_uri,
+      expiresAt: Date.now() + data.expires_in * 1000,
+      interval: data.interval || 5,
+      polling: false,
+    };
+
+    shell.openExternal(data.verification_uri);
+    return { ok: true, userCode: data.user_code, verificationUri: data.verification_uri };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Failed to start OAuth flow' };
+  }
+});
+
+ipcMain.handle('github-oauth-poll', async (_, { clientId }: { clientId: string }) => {
+  if (!deviceFlowState) return { status: 'error', error: 'No active device flow' };
+  if (Date.now() > deviceFlowState.expiresAt) {
+    deviceFlowState = null;
+    return { status: 'expired' };
+  }
+
+  try {
+    const res = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: clientId,
+        device_code: deviceFlowState.deviceCode,
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const data = await res.json() as { access_token?: string; error?: string; interval?: number };
+
+    if (data.access_token) {
+      const token = data.access_token;
+      const validation = await validateGitToken('github', token);
+
+      const projectRoot = getProjectRoot();
+      mkdirSync(projectRoot, { recursive: true });
+      const envPath = join(projectRoot, '.env');
+      let envContent = existsSync(envPath) ? readFileSync(envPath, 'utf-8') : '';
+      const regex = /^GITHUB_TOKEN=.*$/m;
+      if (regex.test(envContent)) {
+        envContent = envContent.replace(regex, `GITHUB_TOKEN=${token}`);
+      } else {
+        envContent += `\nGITHUB_TOKEN=${token}`;
+      }
+      writeFileSync(envPath, envContent.trim() + '\n');
+
+      deviceFlowState = null;
+      return { status: 'success', user: validation.user };
+    }
+
+    if (data.error === 'authorization_pending') return { status: 'pending' };
+    if (data.error === 'slow_down') {
+      if (data.interval) deviceFlowState.interval = data.interval;
+      return { status: 'pending', interval: deviceFlowState.interval };
+    }
+    if (data.error === 'access_denied') {
+      deviceFlowState = null;
+      return { status: 'denied' };
+    }
+    if (data.error === 'expired_token') {
+      deviceFlowState = null;
+      return { status: 'expired' };
+    }
+
+    return { status: 'error', error: data.error || 'Unknown error' };
+  } catch (e: unknown) {
+    return { status: 'error', error: e instanceof Error ? e.message : 'Poll failed' };
+  }
+});
+
+ipcMain.handle('github-oauth-cancel', () => {
+  deviceFlowState = null;
+  return { ok: true };
+});
+
+async function validateGitToken(platform: string, token: string): Promise<{ valid: boolean; user?: { login: string; name: string; avatar: string }; error?: string }> {
+  if (!token || token.length < 5) return { valid: false, error: 'Token is too short' };
+
+  try {
+    if (platform === 'github') {
+      const res = await fetch('https://api.github.com/user', {
+        headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) {
+        if (res.status === 401) return { valid: false, error: 'Invalid token — check permissions' };
+        return { valid: false, error: `GitHub API returned ${res.status}` };
+      }
+      const data = await res.json() as { login: string; name: string | null; avatar_url: string };
+      return { valid: true, user: { login: data.login, name: data.name || data.login, avatar: data.avatar_url } };
+    }
+
+    if (platform === 'gitlab') {
+      const res = await fetch('https://gitlab.com/api/v4/user', {
+        headers: { 'PRIVATE-TOKEN': token },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) {
+        if (res.status === 401) return { valid: false, error: 'Invalid token — check permissions' };
+        return { valid: false, error: `GitLab API returned ${res.status}` };
+      }
+      const data = await res.json() as { username: string; name: string; avatar_url: string };
+      return { valid: true, user: { login: data.username, name: data.name || data.username, avatar: data.avatar_url } };
+    }
+
+    if (platform === 'bitbucket') {
+      const res = await fetch('https://api.bitbucket.org/2.0/user', {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) {
+        if (res.status === 401) return { valid: false, error: 'Invalid token — check permissions' };
+        return { valid: false, error: `Bitbucket API returned ${res.status}` };
+      }
+      const data = await res.json() as { username: string; display_name: string; links: { avatar: { href: string } } };
+      return { valid: true, user: { login: data.username, name: data.display_name || data.username, avatar: data.links?.avatar?.href || '' } };
+    }
+
+    return { valid: false, error: 'Unknown platform' };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Unknown error';
+    if (msg.includes('abort') || msg.includes('timeout')) return { valid: false, error: 'Request timed out' };
+    if (msg.includes('ENOTFOUND') || msg.includes('fetch')) return { valid: false, error: 'Network error — check internet connection' };
+    return { valid: false, error: msg };
+  }
+}
+
+ipcMain.handle('validate-git-token', async (_, { platform, token }: { platform: string; token: string }) => {
+  return validateGitToken(platform, token);
+});
+
+ipcMain.handle('save-git-token', async (_, { platform, token }: { platform: string; token: string }) => {
+  const envKey = GIT_TOKEN_ENV_KEYS[platform];
+  if (!envKey) return { ok: false, error: 'Unknown platform' };
+
+  const projectRoot = getProjectRoot();
+  mkdirSync(projectRoot, { recursive: true });
+  const envPath = join(projectRoot, '.env');
+
+  let envContent = existsSync(envPath) ? readFileSync(envPath, 'utf-8') : '';
+  const regex = new RegExp(`^${envKey}=.*$`, 'm');
+  if (regex.test(envContent)) {
+    envContent = envContent.replace(regex, `${envKey}=${token}`);
+  } else {
+    envContent += `\n${envKey}=${token}`;
+  }
+
+  writeFileSync(envPath, envContent.trim() + '\n');
+  return { ok: true };
+});
+
+ipcMain.handle('remove-git-token', async (_, { platform }: { platform: string }) => {
+  const envKey = GIT_TOKEN_ENV_KEYS[platform];
+  if (!envKey) return { ok: false };
+
+  const projectRoot = getProjectRoot();
+  const envPath = join(projectRoot, '.env');
+  if (!existsSync(envPath)) return { ok: true };
+
+  let envContent = readFileSync(envPath, 'utf-8');
+  envContent = envContent.replace(new RegExp(`^${envKey}=.*\n?`, 'm'), '');
+  writeFileSync(envPath, envContent.trim() + '\n');
+  return { ok: true };
+});
+
+ipcMain.handle('get-git-users', async () => {
+  const env = parseEnvFile();
+  const isReal = (v?: string) => !!v && v.length > 10 && !v.startsWith('your_');
+  const results: Record<string, { login: string; name: string; avatar: string } | null> = {
+    github: null, gitlab: null, bitbucket: null,
+  };
+
+  const tasks: Promise<void>[] = [];
+  for (const platform of ['github', 'gitlab', 'bitbucket']) {
+    const envKey = GIT_TOKEN_ENV_KEYS[platform];
+    const token = env[envKey];
+    if (isReal(token)) {
+      tasks.push(
+        validateGitToken(platform, token)
+          .then(r => { if (r.valid && r.user) results[platform] = r.user; })
+          .catch(() => {})
+      );
+    }
+  }
+  await Promise.all(tasks);
+  return results;
+});
+
+ipcMain.handle('open-git-token-page', (_, platform: string) => {
+  const url = GIT_TOKEN_CREATE_URLS[platform];
+  if (url) shell.openExternal(url);
+  return { ok: !!url };
+});
+
 // ── Chat Engine ──────────────────────────────────────────────────
 
 interface ChatMsg { role: string; content: string; timestamp?: number }
@@ -520,7 +918,7 @@ Assistant: ${assistantMsg.slice(0, 2000)}`;
       const r = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
-        body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 1024, messages: [{ role: 'user', content: extractPrompt }] }),
+        body: JSON.stringify({ model: 'gpt-5.2-mini', max_tokens: 1024, messages: [{ role: 'user', content: extractPrompt }] }),
         signal: AbortSignal.timeout(30000),
       });
       if (r.ok) {
@@ -606,7 +1004,7 @@ async function summarizeHistory(msgs: ChatMsg[], provider: string, apiKey: strin
       });
       if (r.ok) { const d = await r.json() as { content: Array<{ text: string }> }; summary = d.content?.[0]?.text || ''; }
     } else if (provider === 'gemini') {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] }),
@@ -617,7 +1015,7 @@ async function summarizeHistory(msgs: ChatMsg[], provider: string, apiKey: strin
       const r = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 2048, messages: [{ role: 'user', content: prompt }] }),
+        body: JSON.stringify({ model: 'gpt-5.2-mini', max_tokens: 2048, messages: [{ role: 'user', content: prompt }] }),
         signal: AbortSignal.timeout(30000),
       });
       if (r.ok) { const d = await r.json() as { choices: Array<{ message: { content: string } }> }; summary = d.choices?.[0]?.message?.content || ''; }
@@ -890,7 +1288,7 @@ async function streamOpenAIWithTools(
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model: 'gpt-4o', max_tokens: 8192, tools: oaiTools, stream: true, messages: oaiMsgs }),
+    body: JSON.stringify({ model: 'gpt-5.2', max_tokens: 8192, tools: oaiTools, stream: true, messages: oaiMsgs }),
     signal: AbortSignal.timeout(180000),
   });
   if (!res.ok) {
@@ -951,7 +1349,7 @@ async function streamGeminiBasic(
     .filter(m => typeof m.content === 'string')
     .map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content as string }] }));
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse&key=${apiKey}`,
     { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents, systemInstruction: { parts: [{ text: buildSystemPrompt() }] } }),
       signal: AbortSignal.timeout(180000) },
@@ -1344,12 +1742,75 @@ function buildAppMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+// ── Auto Update Check ───────────────────────────────────────────
+
+const GITHUB_REPO = 'stronghuni/MegaSloth';
+
+function compareVersions(current: string, latest: string): number {
+  const a = current.replace(/^v/, '').split('.').map(Number);
+  const b = latest.replace(/^v/, '').split('.').map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const diff = (b[i] || 0) - (a[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+async function checkForUpdates() {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+      headers: { Accept: 'application/vnd.github.v3+json' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return;
+
+    const data = await res.json() as {
+      tag_name: string; name: string; html_url: string; body: string;
+      published_at: string;
+      assets: Array<{ name: string; browser_download_url: string; size: number }>;
+    };
+
+    const currentVersion = app.getVersion();
+    const latestVersion = data.tag_name.replace(/^v/, '');
+
+    if (compareVersions(currentVersion, latestVersion) > 0) {
+      const platform = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : 'linux';
+      const downloadAsset = data.assets.find(a => a.name.toLowerCase().includes(platform));
+
+      mainWindow?.webContents.send('update-available', {
+        currentVersion,
+        latestVersion,
+        releaseName: data.name || `v${latestVersion}`,
+        releaseUrl: data.html_url,
+        downloadUrl: downloadAsset?.browser_download_url || data.html_url,
+        releaseNotes: data.body?.slice(0, 500) || '',
+        publishedAt: data.published_at,
+      });
+    }
+  } catch {}
+}
+
+ipcMain.handle('check-for-updates', async () => {
+  await checkForUpdates();
+  return { ok: true };
+});
+
+ipcMain.handle('dismiss-update', () => {
+  const state = loadAppState();
+  state.updateDismissedAt = Date.now();
+  saveAppState(state);
+  return { ok: true };
+});
+
 // ── App Lifecycle ───────────────────────────────────────────────
 
 app.whenReady().then(async () => {
   buildAppMenu();
   await createWindow();
   createTray();
+
+  setTimeout(() => checkForUpdates(), 5000);
+  setInterval(() => checkForUpdates(), 6 * 60 * 60 * 1000);
 });
 
 app.on('window-all-closed', () => {
