@@ -30,7 +30,13 @@
       "category": "public.app-category.developer-tools",
       "artifactName": "MegaSloth-mac-${arch}.${ext}",
       "hardenedRuntime": true,
-      "gatekeeperAssess": false
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSAppleEventsUsageDescription": "MegaSloth needs to interact with other applications for automation.",
+        "NSSystemAdministrationUsageDescription": "MegaSloth requires system administration privileges for certain DevOps tasks."
+      }
     },
     "win": {
       "target": [

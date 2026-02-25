@@ -51,6 +51,26 @@
 - macOS DMG works on both Intel and Apple Silicon
 - Windows installer works on x64 and ARM64 (may show SmartScreen warning as unsigned)
 
+#### macOS Security Warning?
+
+If you see **"Cannot open MegaSloth because Apple cannot verify the developer"**:
+
+**Option 1** (Recommended):
+```bash
+xattr -cr /Applications/MegaSloth.app
+open /Applications/MegaSloth.app
+```
+
+**Option 2**:
+1. Right-click on **MegaSloth.app** in Applications
+2. Select **"Open"**
+3. Click **"Open"** in the dialog
+
+**Option 3**:
+1. Go to **System Settings** → **Privacy & Security**
+2. Find the message about MegaSloth
+3. Click **"Open Anyway"**
+
 Or install via terminal:
 
 ```bash
