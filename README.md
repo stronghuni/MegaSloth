@@ -41,12 +41,13 @@
 
 > No terminal. No coding. Just download, install, and configure your API key in the app.
 
-| Platform | Download |
-|----------|----------|
-| **macOS (Apple Silicon)** | [MegaSloth-arm64.dmg](https://github.com/stronghuni/MegaSloth/releases/latest/download/MegaSloth-arm64.dmg) |
-| **macOS (Intel)** | [MegaSloth-x64.dmg](https://github.com/stronghuni/MegaSloth/releases/latest/download/MegaSloth-x64.dmg) |
-| **Windows** | [MegaSloth-Setup.exe](https://github.com/stronghuni/MegaSloth/releases/latest/download/MegaSloth-Setup.exe) |
-| **Linux** | [MegaSloth.AppImage](https://github.com/stronghuni/MegaSloth/releases/latest/download/MegaSloth.AppImage) |
+| Platform | Download | Status |
+|----------|----------|--------|
+| **macOS (Universal)** | [MegaSloth.dmg](https://github.com/stronghuni/MegaSloth/releases/latest/download/MegaSloth.dmg) | ✅ Ready |
+| **Windows** | Coming Soon | 🚧 In Progress |
+| **Linux** | Coming Soon | 🚧 In Progress |
+
+**macOS Users**: The DMG works on both Intel and Apple Silicon Macs.
 
 Or install via terminal:
 
