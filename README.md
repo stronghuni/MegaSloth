@@ -44,10 +44,12 @@
 | Platform | Download | Status |
 |----------|----------|--------|
 | **macOS (Universal)** | [MegaSloth.dmg](https://github.com/stronghuni/MegaSloth/releases/latest/download/MegaSloth.dmg) | ✅ Ready |
-| **Windows** | Coming Soon | 🚧 In Progress |
+| **Windows (Universal)** | [MegaSloth-Setup.exe](https://github.com/stronghuni/MegaSloth/releases/latest/download/MegaSloth-Setup.exe) | ✅ Ready |
 | **Linux** | Coming Soon | 🚧 In Progress |
 
-**macOS Users**: The DMG works on both Intel and Apple Silicon Macs.
+**Notes**: 
+- macOS DMG works on both Intel and Apple Silicon
+- Windows installer works on x64 and ARM64 (may show SmartScreen warning as unsigned)
 
 Or install via terminal:
 
