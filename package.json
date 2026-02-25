@@ -7,6 +7,38 @@
   "bin": {
     "megasloth": "dist/cli/index.js"
   },
+  "keywords": [
+    "ai-agent",
+    "github-automation",
+    "devops",
+    "ci-cd",
+    "code-review",
+    "gitlab",
+    "bitbucket",
+    "automation",
+    "llm",
+    "claude",
+    "openai",
+    "gemini",
+    "repository-automation",
+    "pr-review",
+    "issue-triage"
+  ],
+  "author": "stronghuni",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stronghuni/MegaSloth.git"
+  },
+  "bugs": {
+    "url": "https://github.com/stronghuni/MegaSloth/issues"
+  },
+  "homepage": "https://github.com/stronghuni/MegaSloth#readme",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc && node --input-type=commonjs -e \"require('fs').cpSync('src/skills/builtin','dist/skills/builtin',{recursive:true})\"",

@@ -1,0 +1,52 @@
+# Source files
+src/
+tsconfig.json
+tsconfig.*.json
+
+# Tests
+__tests__/
+*.test.ts
+*.spec.ts
+vitest.config.ts
+
+# Development
+.env
+.env.*
+!.env.example
+node_modules/
+.megasloth/
+*.log
+*.pid
+
+# Build artifacts
+.tsbuildinfo
+coverage/
+
+# Desktop app
+desktop/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Images (except for README)
+*.png
+*.jpg
+*.gif
+*.icns
+!readme_image.png
+
+# Git
+.git/
+.gitignore
+.github/
+
+# IDE
+.vscode/
+.cursor/
+.idea/
+
+# Misc
+.DS_Store
+Thumbs.db
